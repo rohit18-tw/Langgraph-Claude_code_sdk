@@ -1,0 +1,78 @@
+Objective:  
+Generate a complete and valid OpenAPI 3.0+ specification file for each application in the project:
+
+1. The main (original) application  
+   naming convention : {capabilityname-original-openapi.yaml}  
+   path : original-code/swagger/{capabilityname-original-openapi.yaml}  
+
+2. The mock third-party application  
+   path : mock-code/swagger/{capabilityname-mock-openapi.yaml}  
+   naming convention : {capabilityname-mock-openapi.yaml}  
+
+Purpose:  
+To enable accurate API documentation based on openapi specifications.  
+To help backend teams validate API behavior  
+To allow simulation of complete workflows without requiring access to real services  
+
+Format Requirements:  
+Use **OpenAPI 3.0 or later**  
+Output as a standalone, human-readable openapi.yaml file (preferred over JSON)  
+Do **not** use Swagger annotations or libraries in code — the spec must be authored separately, as an external file  
+
+Content Checklist (for all applications):  
+
+**Info Block**  
+Title, version, brief description, and contact info (if available)
+
+**Paths**  
+Include all REST API endpoints from the implemented controllers  
+For each endpoint and HTTP method:  
+- Operation summary and description  
+- Parameters (path, query, header)  
+- Request body schema  
+- Response codes (2xx, 4xx, 5xx)  
+- Response schema  
+- Fallback and error responses  
+- Example payloads (both success and error cases)  
+
+**Components / Schemas**  
+Define reusable request and response schemas under components.schemas  
+Indicate required fields, field types, formats, enums, and constraints  
+Include example values  
+Include error model definitions  
+
+**Validation Rules**  
+Reflect required field rules, constraints, and field mismatch behaviors  
+Mention fallback behavior in the descriptions (e.g., retry rules, error messages)
+
+**Security Schemes**  
+If any auth mechanism is used (e.g., Basic Auth, API Key), define it under components.securitySchemes  
+Reference it in the security block at the global or operation level  
+If not applicable, skip
+
+Required Endpoints:  
+All endpoints implemented in the Controller classes  
+All health check endpoints (e.g., /health, /health/live, /health/ready)  
+All API endpoints following the pattern /v1/{capability-name}/{mode}/{operation}
+
+Required Schemas:  
+All request and response DTOs used in the controllers  
+All error response models  
+Health response models
+
+Validation:  
+It must be suitable for use in Swagger UI, Redoc, or importing into Postman  
+Should be clearly formatted, with consistent indentation and spacing  
+Ensure all paths and schemas are fully defined with appropriate examples  
+Verify that all implemented endpoints are documented  
+
+Please ensure accurate rendering on the Swagger UI website. You can make changes to the pom.xml, the OpenAPI YAML (which you are going to create), and application.yaml files if needed. If necessary, you may also add an OpenApiConfig.java file — but do not make any other code changes. Make sure the entire end-to-end flow is working correctly. That means:  
+- The server URL and port must align correctly.  
+- The /swagger-ui.html page must load properly.  
+- All documented endpoints should appear and be accessible via Swagger UI.  
+- When executing API requests through Swagger UI, they must return the correct response payloads as per the specification.  
+- After generation, ensure CORS settings are handled properly for Swagger UI within the `OpenApiConfig.java` file. 
+Do not duplicate Swagger-related CORS logic elsewhere. 
+General application-wide CORS should still be configured using `WebMvcConfigurer` or a `CorsConfigurationSource` bean in the main config files.
+
+

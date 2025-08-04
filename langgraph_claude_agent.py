@@ -3,10 +3,12 @@ import os
 import asyncio
 import sys
 import argparse
-from typing import TypedDict, List, Optional, Any, Dict
+from pathlib import Path
+from typing import TypedDict, List, Optional, Any, Dict, AsyncGenerator
 from langgraph.graph import StateGraph, END
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
 from claude_code_sdk import query, ClaudeCodeOptions, Message
+import json
 
 load_dotenv()
 
@@ -18,14 +20,15 @@ class AgentState(TypedDict):
     error: Optional[str]
 
 class ClaudeCodeAgent:
-    def __init__(self, max_turns: int = 5, permission_mode: str = "acceptEdits"):
-        self.max_turns = max_turns
+    def __init__(self, permission_mode: str = "acceptEdits"):
         self.permission_mode = permission_mode
 
     async def execute_claude_code(self, prompt: str) -> Dict[str, Any]:
+        # Omit max_turns entirely for unlimited turns
         options = ClaudeCodeOptions(
-            max_turns=self.max_turns,
-            permission_mode=self.permission_mode
+            permission_mode=self.permission_mode,
+            cwd=Path.cwd(),  # Set current working directory
+            allowed_tools=["read_file", "list_files", "write_to_file", "replace_in_file", "execute_command"]  # Enable filesystem tools
         )
 
         result_data = {
@@ -36,18 +39,87 @@ class ClaudeCodeAgent:
 
         try:
             async for message in query(prompt=prompt, options=options):
+                # Capture the final result
                 if hasattr(message, 'subtype') and message.subtype == 'success':
-                    result_data["result"] = message.result
+                    result_data["result"] = getattr(message, 'result', None)
                     result_data["metadata"] = {
                         "total_cost_usd": getattr(message, 'total_cost_usd', 0),
                         "duration_ms": getattr(message, 'duration_ms', 0),
                         "num_turns": getattr(message, 'num_turns', 0),
                         "session_id": getattr(message, 'session_id', None)
                     }
+
         except Exception as e:
             result_data["error"] = str(e)
 
         return result_data
+
+    async def execute_claude_code_streaming(self, prompt: str) -> AsyncGenerator[Dict[str, Any], None]:
+        """Stream Claude Code execution with real-time tool visibility"""
+        options = ClaudeCodeOptions(
+            permission_mode=self.permission_mode,
+            cwd=Path.cwd()
+        )
+
+        try:
+            async for message in query(prompt=prompt, options=options):
+                # Just pass through the messages from Claude Code SDK
+                message_type = type(message).__name__
+
+                # Tool usage from AssistantMessage
+                if message_type == 'AssistantMessage' and hasattr(message, 'content'):
+                    for item in message.content:
+                        if hasattr(item, 'name') and hasattr(item, 'input'):
+                            tool_name = item.name
+                            tool_input = item.input
+
+                            yield {
+                                "type": "tool_use",
+                                "tool_name": tool_name,
+                                "tool_input": tool_input
+                            }
+
+                # Final result
+                elif hasattr(message, 'subtype') and message.subtype == 'success':
+                    yield {
+                        "type": "success",
+                        "result": getattr(message, 'result', None),
+                        "metadata": {
+                            "total_cost_usd": getattr(message, 'total_cost_usd', 0),
+                            "duration_ms": getattr(message, 'duration_ms', 0),
+                            "num_turns": getattr(message, 'num_turns', 0),
+                            "session_id": getattr(message, 'session_id', None)
+                        }
+                    }
+
+        except Exception as e:
+            yield {
+                "type": "error",
+                "message": f"❌ Execution error: {str(e)}",
+                "error": str(e)
+            }
+
+    def _format_tool_message(self, tool_name: str, tool_input: Dict[str, Any]) -> str:
+        """Simple tool message formatting - same as command line"""
+        if tool_name == 'LS':
+            path = tool_input.get('path', '')
+            return f"📁 Listing: {path}"
+        elif tool_name == 'Read':
+            path = tool_input.get('file_path', '')
+            return f"📖 Reading: {path}"
+        elif tool_name == 'Write':
+            path = tool_input.get('file_path', '') or tool_input.get('path', '')
+            return f"📝 Writing: {path}"
+        elif tool_name == 'Edit':
+            path = tool_input.get('file_path', '') or tool_input.get('path', '')
+            return f"✏️ Editing: {path}"
+        elif tool_name == 'Bash':
+            command = tool_input.get('command', '')
+            return f"⚡ Running: {command}"
+        elif tool_name == 'TodoWrite':
+            return f"📝 Writing todo items"
+        else:
+            return f" {tool_name}"
 
 class ClaudeCodeAgentNodes:
     def __init__(self):
@@ -126,7 +198,6 @@ def get_user_prompt() -> str:
     parser = argparse.ArgumentParser(description="Claude Code LangGraph Agent")
     parser.add_argument("-p", "--prompt", type=str, help="The coding task prompt")
     parser.add_argument("-i", "--interactive", action="store_true", help="Interactive mode")
-    parser.add_argument("--max-turns", type=int, default=5, help="Max API turns")
     parser.add_argument("--permission-mode", type=str, default="acceptEdits",
                        choices=["default", "acceptEdits", "bypassPermissions", "plan"])
 
@@ -148,28 +219,99 @@ def get_user_prompt() -> str:
     parser.print_help()
     sys.exit(1)
 
-async def run_single_task(prompt: str, max_turns: int = 5, permission_mode: str = "acceptEdits"):
+async def run_single_task(prompt: str, permission_mode: str = "acceptEdits"):
     workflow = ClaudeCodeLangGraphWorkflow()
-    workflow.agent_nodes.claude_agent.max_turns = max_turns
     workflow.agent_nodes.claude_agent.permission_mode = permission_mode
 
     try:
-        result = await workflow.run_task(prompt)
+        print(f"🤖 Executing: {prompt}")
+        print("=" * 80)
 
-        if result["success"]:
-            print("✅ Success!")
-            if result["result"]:
-                print(f"\n{result['result']}")
-        else:
-            print("❌ Failed!")
-            print(f"Error: {result['error']}")
+        # Use streaming method for command line to show real-time progress
+        async for stream_data in workflow.agent_nodes.claude_agent.execute_claude_code_streaming(prompt):
+            if stream_data.get('type') == 'status':
+                print(f"📌 {stream_data['message']}")
+                if stream_data.get('details'):
+                    print(f"   {stream_data['details']}")
+
+            elif stream_data.get('type') == 'init':
+                print(f"🔧 {stream_data['message']}")
+                if stream_data.get('details'):
+                    print(f"   {stream_data['details']}")
+
+            elif stream_data.get('type') == 'tool_use':
+                tool_name = stream_data.get('tool_name', '')
+                tool_input = stream_data.get('tool_input', {})
+
+                # Show simple, clean tool usage
+                if tool_name == 'LS':
+                    path = tool_input.get('path', '')
+                    print(f"📁 Listing: {path}")
+                elif tool_name == 'Read':
+                    path = tool_input.get('file_path', '')
+                    print(f"📖 Reading: {path}")
+                elif tool_name == 'Write':
+                    path = tool_input.get('file_path', '') or tool_input.get('path', '')
+                    print(f"📝 Writing: {path}")
+                elif tool_name == 'Edit':
+                    path = tool_input.get('file_path', '') or tool_input.get('path', '')
+                    print(f"✏️ Editing: {path}")
+                elif tool_name == 'Bash':
+                    command = tool_input.get('command', '')
+                    print(f"⚡ Running: {command}")
+                elif tool_name == 'TodoWrite':
+                    print(f"📝 Writing todo items")
+                else:
+                    print(f"🔧 {tool_name}")
+
+            elif stream_data.get('type') == 'thinking':
+                print(f"💭 {stream_data['message']}")
+                if stream_data.get('details'):
+                    # Show truncated thinking details
+                    details = stream_data['details']
+                    if len(details) > 100:
+                        details = details[:100] + "..."
+                    print(f"   {details}")
+
+            elif stream_data.get('type') == 'tool_result':
+                print(f"📋 {stream_data['message']}")
+                if stream_data.get('details'):
+                    # Show truncated tool result
+                    details = stream_data['details']
+                    if len(details) > 200:
+                        details = details[:200] + "..."
+                    print(f"   Result: {details}")
+
+            elif stream_data.get('type') == 'success':
+                print("\n" + "=" * 80)
+                print("✅ Task Completed Successfully!")
+                print("=" * 80)
+
+                if stream_data.get('result'):
+                    print(f"\n{stream_data['result']}")
+
+                if stream_data.get('metadata'):
+                    metadata = stream_data['metadata']
+                    print(f"\n📊 Execution Summary:")
+                    print(f"   Duration: {metadata.get('duration_ms', 0)}ms")
+                    print(f"   Turns: {metadata.get('num_turns', 0)}")
+                    print(f"   Cost: ${metadata.get('total_cost_usd', 0):.4f}")
+                    if metadata.get('session_id'):
+                        print(f"   Session: {metadata['session_id'][:8]}...")
+                break
+
+            elif stream_data.get('type') == 'error':
+                print("\n" + "=" * 80)
+                print("❌ Task Failed!")
+                print("=" * 80)
+                print(f"Error: {stream_data.get('message', 'Unknown error')}")
+                break
 
     except Exception as e:
         print(f"❌ Error: {str(e)}")
 
 async def main():
     parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("--max-turns", type=int, default=5)
     parser.add_argument("--permission-mode", type=str, default="acceptEdits")
     args, _ = parser.parse_known_args()
 
@@ -179,7 +321,7 @@ async def main():
             print("❌ No prompt provided!")
             return
 
-        await run_single_task(prompt, args.max_turns, args.permission_mode)
+        await run_single_task(prompt, args.permission_mode)
 
     except KeyboardInterrupt:
         print("\nBye!")

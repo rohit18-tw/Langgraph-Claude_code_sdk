@@ -1,45 +1,35 @@
 # Claude Code SDK + LangGraph Integration
 
-This project demonstrates how to integrate the Claude Code SDK with LangGraph to create powerful multi-agent workflows for automated code generation, testing, and documentation.
+This project demonstrates how to integrate the Claude Code SDK with LangGraph to create a powerful workflow for automated code generation, testing, and documentation.
 
 ## Overview
 
 The integration provides:
-- **Single Agent Wrapper**: Simple LangGraph wrapper around Claude Code SDK
-- **Multi-Agent Workflow**: Orchestrated workflow with specialized agents for different tasks
+- **LangGraph Wrapper**: LangGraph wrapper around Claude Code SDK for workflow management
 - **State Management**: Proper state tracking across the workflow
 - **Cost Tracking**: Monitor API usage and costs
 - **Error Handling**: Robust error handling and recovery
+- **Interactive Mode**: Command-line interface for interactive usage
 
 ## Architecture
 
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   User Request  │───▶│   Planner Agent  │───▶│  Task Routing   │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
+│   User Request  │───▶│  LangGraph Flow  │───▶│  Claude Code    │
+└─────────────────┘    └──────────────────┘    │     Agent       │
+                                               └─────────────────┘
                                                          │
-                       ┌─────────────────────────────────┼─────────────────────────────────┐
-                       ▼                                 ▼                                 ▼
-              ┌─────────────────┐                ┌──────────────────┐          ┌─────────────────────┐
-              │ Code Generation │                │ Test Generation  │          │ Documentation Gen   │
-              │     Agent       │                │      Agent       │          │       Agent         │
-              │ (Claude Code)   │                │  (Claude Code)   │          │   (Claude Code)     │
-              └─────────────────┘                └──────────────────┘          └─────────────────────┘
-                       │                                 │                                 │
-                       └─────────────────────────────────┼─────────────────────────────────┘
                                                          ▼
                                                 ┌─────────────────┐
-                                                │  Coordinator    │
-                                                │     Agent       │
+                                                │    Response     │
+                                                │   Processing    │
                                                 └─────────────────┘
 ```
 
 ## Files
 
-- **`claude_test.py`**: Original simple wrapper for Claude Code SDK
 - **`langgraph_claude_agent.py`**: Core LangGraph integration with Claude Code
-- **`multi_agent_example.py`**: Advanced multi-agent workflow implementation
-- **`requirements.txt`**: All required dependencies
+- **`requirements.txt`**: All required dependencies  
 - **`.env`**: Environment variables (API keys)
 
 ## Installation
@@ -82,26 +72,35 @@ async def main():
 asyncio.run(main())
 ```
 
-### Multi-Agent Workflow
+### Command Line Usage
 
-```python
-from multi_agent_example import MultiAgentWorkflow
-import asyncio
+The script supports multiple ways to provide input:
 
-async def main():
-    workflow = MultiAgentWorkflow()
-    
-    result = await workflow.run_multi_agent_task(
-        "Create a binary search function with comprehensive tests and documentation"
-    )
-    
-    if result["success"]:
-        print("Code:", result["code"])
-        print("Tests:", result["tests"])
-        print("Documentation:", result["documentation"])
-        print("Completed tasks:", result["completed_tasks"])
+**Command line prompt:**
+```bash
+python langgraph_claude_agent.py --prompt "Write a Python factorial function"
+python langgraph_claude_agent.py -p "Create a REST API endpoint"
+```
 
-asyncio.run(main())
+**Interactive mode:**
+```bash
+python langgraph_claude_agent.py --interactive
+python langgraph_claude_agent.py -i
+```
+
+**Default interactive (no arguments):**
+```bash
+python langgraph_claude_agent.py
+```
+
+**Piped input:**
+```bash
+echo "Write unit tests for binary search" | python langgraph_claude_agent.py
+```
+
+**With custom options:**
+```bash
+python langgraph_claude_agent.py -p "Build a web scraper" --max-turns 3 --permission-mode bypassPermissions
 ```
 
 ## Key Features
@@ -109,30 +108,30 @@ asyncio.run(main())
 ### 1. **State Management**
 - Tracks conversation history
 - Maintains task progress
-- Stores results from each agent
+- Stores workflow results
 - Handles error states
 
-### 2. **Agent Orchestration**
-- **Planner Agent**: Breaks down complex requests into tasks
-- **Code Agent**: Generates clean, commented code
-- **Test Agent**: Creates comprehensive unit tests
-- **Documentation Agent**: Produces detailed documentation
-- **Coordinator**: Summarizes results and manages workflow
+### 2. **LangGraph Integration**
+- **Workflow Engine**: Orchestrates Claude Code SDK interactions
+- **State Tracking**: Maintains context across workflow steps
+- **Error Handling**: Graceful failure recovery
+- **Result Processing**: Structured output formatting
 
-### 3. **Flexible Routing**
-- Dynamic task planning based on request content
-- Conditional routing between agents
-- Error recovery and fallback paths
+### 3. **Flexible Input Methods**
+- Command-line arguments for direct task execution
+- Interactive mode for exploratory usage
+- Piped input for integration with other tools
+- Multiple configuration options
 
 ### 4. **Cost Tracking**
-- Monitors API usage across all agents
+- Monitors API usage and costs
 - Provides detailed cost breakdowns
-- Tracks execution time and API turns
+- Tracks execution time and API calls
 
 ### 5. **Configuration Options**
-- Adjustable `max_turns` for each agent
+- Adjustable `max_turns` to limit conversation length
 - Configurable `permission_mode` for automated workflows
-- Customizable system prompts and agent behavior
+- Customizable system prompts and behavior
 
 ## Configuration
 
@@ -153,24 +152,40 @@ agent = ClaudeCodeAgent(
 
 ## Example Outputs
 
-### Single Task
+### Successful Task Execution
 ```
 🚀 Starting Claude Code workflow for task: Write a Python function to calculate factorial
 🤖 Claude Code Agent executing task: Write a Python function to calculate factorial
 📋 Reviewing Claude Code result...
 ✅ Task completed successfully!
 Cost: $0.0023, Duration: 1250ms
+
+Result:
+def factorial(n):
+    """Calculate factorial of a non-negative integer."""
+    if n < 0:
+        raise ValueError("Factorial is not defined for negative numbers")
+    if n == 0 or n == 1:
+        return 1
+    
+    result = 1
+    for i in range(2, n + 1):
+        result *= i
+    return result
 ```
 
-### Multi-Agent Task
+### Interactive Mode
 ```
-🚀 Starting multi-agent workflow for: Create a binary search function with tests and docs
-🎯 Planner analyzing request: Create a binary search function with tests and docs
-💻 Code generation agent working on: Create a binary search function with tests and docs
-🧪 Test generation agent working on tests for: Create a binary search function with tests and docs
-📚 Documentation agent working on docs for: Create a binary search function with tests and docs
-🎼 Coordinator summarizing results...
-✅ Multi-agent workflow completed successfully!
+$ python langgraph_claude_agent.py --interactive
+🤖 Claude Code LangGraph Workflow - Interactive Mode
+💡 Enter your coding task (or 'quit' to exit):
+> Create a function to validate email addresses
+
+🚀 Starting Claude Code workflow for task: Create a function to validate email addresses
+🤖 Claude Code Agent executing task: Create a function to validate email addresses
+📋 Reviewing Claude Code result...
+✅ Task completed successfully!
+Cost: $0.0034, Duration: 1820ms
 ```
 
 ## Advanced Usage
@@ -179,22 +194,39 @@ Cost: $0.0023, Duration: 1250ms
 
 You can extend the system by:
 
-1. **Adding new agent types**:
+1. **Customizing the workflow**:
    ```python
-   workflow.add_node("security_review", security_review_node)
+   from langgraph_claude_agent import ClaudeCodeLangGraphWorkflow
+   
+   # Create custom workflow with specific configuration
+   workflow = ClaudeCodeLangGraphWorkflow()
+   
+   # Run with custom parameters
+   result = await workflow.run_task(
+       "Generate secure password validation function",
+       max_turns=3,
+       permission_mode="acceptEdits"
+   )
    ```
 
-2. **Custom routing logic**:
+2. **Specialized prompts**:
    ```python
-   def custom_router(state):
-       if "security" in state["original_request"].lower():
-           return "security_review"
-       return "end"
+   security_prompt = "Review this code for security vulnerabilities and suggest improvements"
+   result = await workflow.run_task(security_prompt)
    ```
 
-3. **Specialized prompts**:
+3. **Batch processing**:
    ```python
-   security_prompt = f"Review this code for security vulnerabilities: {code}"
+   tasks = [
+       "Create a function to validate emails",
+       "Write unit tests for the email validator",
+       "Generate documentation for the email validator"
+   ]
+   
+   results = []
+   for task in tasks:
+       result = await workflow.run_task(task)
+       results.append(result)
    ```
 
 ### Integration with External Systems
@@ -215,8 +247,8 @@ The system includes comprehensive error handling:
 
 ## Performance Considerations
 
-- **Parallel execution**: Agents can run independently when possible
 - **Cost optimization**: Configurable turn limits to control API usage
+- **Efficient execution**: Single workflow reduces overhead
 - **Caching**: Results can be cached to avoid redundant API calls
 - **Streaming**: Supports streaming responses for real-time feedback
 
@@ -224,10 +256,10 @@ The system includes comprehensive error handling:
 
 To extend this system:
 
-1. **Add new agent types** in the `MultiAgentWorkflow` class
-2. **Implement custom routing logic** for your specific use cases
+1. **Enhance the workflow** in the `ClaudeCodeLangGraphWorkflow` class
+2. **Add custom configuration options** for specific use cases
 3. **Create specialized prompts** for domain-specific tasks
-4. **Add new state fields** to track additional information
+4. **Extend state management** to track additional information
 
 ## Troubleshooting
 
