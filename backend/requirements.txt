@@ -1,0 +1,11 @@
+fastapi>=0.110.0     # Allow latest FastAPI, which works with anyio 4.x
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+websockets==12.0
+python-dotenv==1.0.0
+pathlib==1.0.1
+aiofiles==23.2.1
+
+langgraph
+langchain-core
+claude-code-sdk      # Will then install latest, which needs anyio>=4.0.0
