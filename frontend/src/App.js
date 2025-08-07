@@ -103,10 +103,18 @@ function App() {
 
   const loadSessionFiles = async () => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/sessions/${sessionId}/files`);
+      console.log('Loading files for session:', sessionId);
+      console.log('API URL:', `${API_BASE_URL}/sessions/${sessionId}/files`);
+      const response = await axios.get(`${API_BASE_URL}/sessions/${sessionId}/files`, {
+        headers: {
+          'ngrok-skip-browser-warning': 'true'
+        }
+      });
+      console.log('Files response:', response.data);
       setUploadedFiles(response.data.files || []);
     } catch (error) {
-      // Handle error silently
+      console.error('Error loading session files:', error);
+      addMessage('error', `Failed to load files: ${error.message}`);
     }
   };
 
@@ -123,6 +131,7 @@ function App() {
         {
           headers: {
             'Content-Type': 'multipart/form-data',
+            'ngrok-skip-browser-warning': 'true'
           },
         }
       );
@@ -179,7 +188,11 @@ function App() {
 
   const handleClearSession = async () => {
     try {
-      await axios.delete(`${API_BASE_URL}/sessions/${sessionId}`);
+      await axios.delete(`${API_BASE_URL}/sessions/${sessionId}`, {
+        headers: {
+          'ngrok-skip-browser-warning': 'true'
+        }
+      });
       setUploadedFiles([]);
       setMessages([]);
       addMessage('system', 'Session cleared successfully');

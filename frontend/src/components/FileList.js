@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import FileViewer from './FileViewer';
-import FileTree from './FileTree';
 import './FileList.css';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
@@ -77,7 +76,12 @@ const FileList = ({ files, onClearSession, sessionId }) => {
 
     try {
       const response = await axios.get(
-        `${API_BASE_URL}/sessions/${sessionId}/files/${encodeURIComponent(file.path)}`
+        `${API_BASE_URL}/sessions/${sessionId}/files/${encodeURIComponent(file.path)}`,
+        {
+          headers: {
+            'ngrok-skip-browser-warning': 'true'
+          }
+        }
       );
 
       if (response.data.success) {
@@ -173,27 +177,6 @@ const FileList = ({ files, onClearSession, sessionId }) => {
         </>
       )}
 
-      {/* Show file tree only for uploaded files with folder structure */}
-      {(() => {
-        // Filter for uploaded files (those in UUID session directories)
-        const uploadedFilesWithStructure = files.filter(file => {
-          const pathParts = file.path.split('/');
-          const firstDir = pathParts[0];
-
-          // Check if file is in a UUID session directory (uploaded files)
-          return firstDir.match(/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/);
-        });
-
-        return uploadedFilesWithStructure.length > 0 && (
-          <div className="file-section">
-            <h4>📁 File Structure</h4>
-            <FileTree
-              files={uploadedFilesWithStructure}
-              onFileClick={handleViewFile}
-            />
-          </div>
-        );
-      })()}
 
       {viewingFile && (
         <FileViewer

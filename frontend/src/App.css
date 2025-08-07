@@ -76,13 +76,13 @@
 .right-panel {
   flex: 1;
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   overflow: hidden;
 }
 
 .right-panel .chat-interface {
   flex: 1;
-  min-width: 0; /* Allow shrinking */
+  width: 100%;
 }
 
 /* Responsive design */
