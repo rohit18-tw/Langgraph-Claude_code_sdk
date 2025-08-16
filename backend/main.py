@@ -294,7 +294,8 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
 
                             # Check for standard Claude Code SDK tools
                             if tool_name == 'write_to_file':
-                                filename = tool_input.get('path', 'file')
+                                filepath = tool_input.get('path', 'file')
+                                filename = Path(filepath).name if filepath != '.' else 'directory'
                                 await websocket.send_text(json.dumps({
                                     "type": "file_generation",
                                     "message": f"🔨 Generating {filename}",
@@ -302,7 +303,8 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                                     "timestamp": datetime.now().isoformat()
                                 }))
                             elif tool_name == 'replace_in_file':
-                                filename = tool_input.get('path', 'file')
+                                filepath = tool_input.get('path', 'file')
+                                filename = Path(filepath).name if filepath != '.' else 'file'
                                 await websocket.send_text(json.dumps({
                                     "type": "file_generation",
                                     "message": f"✏️ Updating {filename}",
@@ -310,7 +312,8 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                                     "timestamp": datetime.now().isoformat()
                                 }))
                             elif tool_name == 'read_file':
-                                filename = tool_input.get('path', 'file')
+                                filepath = tool_input.get('path', 'file')
+                                filename = Path(filepath).name if filepath != '.' else 'file'
                                 await websocket.send_text(json.dumps({
                                     "type": "file_generation",
                                     "message": f"📖 Reading {filename}",
@@ -318,11 +321,12 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                                     "timestamp": datetime.now().isoformat()
                                 }))
                             elif tool_name == 'list_files':
-                                path = tool_input.get('path', '.')
+                                filepath = tool_input.get('path', '.')
+                                dirname = Path(filepath).name if filepath != '.' else 'current directory'
                                 await websocket.send_text(json.dumps({
                                     "type": "file_generation",
-                                    "message": f"📁 Listing directory {path}",
-                                    "filename": path,
+                                    "message": f"📁 Listing {dirname}",
+                                    "filename": dirname,
                                     "timestamp": datetime.now().isoformat()
                                 }))
                             elif tool_name == 'execute_command':
@@ -335,7 +339,8 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                                 }))
                             # Also check for the mapped tool names from the agent
                             elif tool_name == 'Write':
-                                filename = tool_input.get('file_path', '') or tool_input.get('path', 'file')
+                                filepath = tool_input.get('file_path', '') or tool_input.get('path', 'file')
+                                filename = Path(filepath).name if filepath and filepath != '.' else 'file'
                                 await websocket.send_text(json.dumps({
                                     "type": "file_generation",
                                     "message": f"🔨 Generating {filename}",
@@ -343,7 +348,8 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                                     "timestamp": datetime.now().isoformat()
                                 }))
                             elif tool_name == 'Edit':
-                                filename = tool_input.get('file_path', '') or tool_input.get('path', 'file')
+                                filepath = tool_input.get('file_path', '') or tool_input.get('path', 'file')
+                                filename = Path(filepath).name if filepath and filepath != '.' else 'file'
                                 await websocket.send_text(json.dumps({
                                     "type": "file_generation",
                                     "message": f"✏️ Updating {filename}",
@@ -351,7 +357,8 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                                     "timestamp": datetime.now().isoformat()
                                 }))
                             elif tool_name == 'Read':
-                                filename = tool_input.get('file_path', '') or tool_input.get('path', 'file')
+                                filepath = tool_input.get('file_path', '') or tool_input.get('path', 'file')
+                                filename = Path(filepath).name if filepath and filepath != '.' else 'file'
                                 await websocket.send_text(json.dumps({
                                     "type": "file_generation",
                                     "message": f"📖 Reading {filename}",
@@ -359,11 +366,12 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                                     "timestamp": datetime.now().isoformat()
                                 }))
                             elif tool_name == 'LS':
-                                path = tool_input.get('path', '.')
+                                filepath = tool_input.get('path', '.')
+                                dirname = Path(filepath).name if filepath != '.' else 'current directory'
                                 await websocket.send_text(json.dumps({
                                     "type": "file_generation",
-                                    "message": f"📁 Listing directory {path}",
-                                    "filename": path,
+                                    "message": f"📁 Listing {dirname}",
+                                    "filename": dirname,
                                     "timestamp": datetime.now().isoformat()
                                 }))
                             elif tool_name == 'Bash':

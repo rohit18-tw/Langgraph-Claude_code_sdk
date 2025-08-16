@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import './ChatInterface.css';
 
-const ChatInterface = ({ messages, onSendMessage, isLoading, isConnected, currentProgress }) => {
+const ChatInterface = ({ messages, onSendMessage, isLoading, isConnected, currentProgress, onStopGeneration }) => {
   const [inputMessage, setInputMessage] = useState('');
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
@@ -40,13 +40,13 @@ const ChatInterface = ({ messages, onSendMessage, isLoading, isConnected, curren
 
   const getMessageIcon = (sender) => {
     switch (sender) {
-      case 'user': return '👤';
-      case 'assistant': return '🤖';
-      case 'system': return 'ℹ️';
-      case 'tool': return '🔧';
-      case 'progress': return '⚡';
-      case 'error': return '❌';
-      default: return '💬';
+      case 'user': return 'U';
+      case 'assistant': return 'A';
+      case 'system': return 'S';
+      case 'tool': return 'T';
+      case 'progress': return 'P';
+      case 'error': return 'E';
+      default: return 'M';
     }
   };
 
@@ -72,13 +72,13 @@ const ChatInterface = ({ messages, onSendMessage, isLoading, isConnected, curren
         {metadata.metadata && (
           <div className="execution-stats">
             {metadata.metadata.duration_ms && (
-              <span>⏱️ {metadata.metadata.duration_ms}ms</span>
+              <span>{metadata.metadata.duration_ms}ms</span>
             )}
             {metadata.metadata.num_turns && (
-              <span>🔄 {metadata.metadata.num_turns} turns</span>
+              <span>{metadata.metadata.num_turns} turns</span>
             )}
             {metadata.metadata.total_cost_usd && (
-              <span>💰 ${metadata.metadata.total_cost_usd.toFixed(4)}</span>
+              <span>${metadata.metadata.total_cost_usd.toFixed(4)}</span>
             )}
           </div>
         )}
@@ -89,10 +89,10 @@ const ChatInterface = ({ messages, onSendMessage, isLoading, isConnected, curren
   return (
     <div className="chat-interface">
       <div className="chat-header">
-        <h3>💬 Chat with Claude</h3>
+        <h3>AI Assistant</h3>
         <div className="chat-status">
-          {isLoading && <span className="loading-indicator">⏳ Processing...</span>}
-          {!isConnected && <span className="connection-warning">⚠️ Offline Mode</span>}
+          {isLoading && <span className="loading-indicator">Processing...</span>}
+          {!isConnected && <span className="connection-warning">Offline Mode</span>}
         </div>
       </div>
 
@@ -100,15 +100,15 @@ const ChatInterface = ({ messages, onSendMessage, isLoading, isConnected, curren
         {messages.length === 0 ? (
           <div className="welcome-message">
             <div className="welcome-content">
-              <h4>👋 Welcome to Claude Code Agent!</h4>
-              <p>Upload your files and start asking questions about your code.</p>
+              <h4>Welcome to FStratum!</h4>
+              <p>Upload your files and start analyzing your codebase.</p>
               <div className="example-prompts">
                 <p><strong>Try asking:</strong></p>
                 <ul>
                   <li>"Analyze the uploaded code and suggest improvements"</li>
-                  <li>"Create a new React component based on the uploaded design"</li>
-                  <li>"Fix any bugs in the uploaded Python script"</li>
-                  <li>"Generate documentation for the uploaded code"</li>
+                  <li>"Create new components based on the uploaded design"</li>
+                  <li>"Identify and fix potential issues in the code"</li>
+                  <li>"Generate comprehensive documentation"</li>
                 </ul>
               </div>
             </div>
@@ -137,7 +137,7 @@ const ChatInterface = ({ messages, onSendMessage, isLoading, isConnected, curren
             {currentProgress && (
               <div className="message progress">
                 <div className="message-header">
-                  <span className="message-icon">⚡</span>
+                  <span className="message-icon">P</span>
                   <span className="message-sender">Progress</span>
                   <span className="message-timestamp">
                     {formatTimestamp(Date.now())}
@@ -145,8 +145,17 @@ const ChatInterface = ({ messages, onSendMessage, isLoading, isConnected, curren
                 </div>
                 <div className="message-content">
                   <div className="progress-content">
-                    <div className="progress-spinner">⏳</div>
+                    <div className="progress-spinner">●</div>
                     <div className="progress-text">{currentProgress}</div>
+                    {onStopGeneration && (
+                      <button
+                        onClick={onStopGeneration}
+                        className="stop-button"
+                        title="Stop code generation"
+                      >
+                        Stop
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -177,7 +186,7 @@ const ChatInterface = ({ messages, onSendMessage, isLoading, isConnected, curren
             disabled={!inputMessage.trim() || isLoading}
             className="send-button"
           >
-            {isLoading ? '⏳' : '📤'}
+            {isLoading ? '●' : 'Send'}
           </button>
         </div>
 

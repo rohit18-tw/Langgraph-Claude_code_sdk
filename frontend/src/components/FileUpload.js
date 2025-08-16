@@ -69,7 +69,7 @@ const FileUpload = ({ onFileUpload }) => {
 
   return (
     <div className="file-upload-container">
-      <h3>📂 Upload Files</h3>
+      <h3>📂 Files</h3>
 
       <div {...getRootProps()} className={getDropzoneClassName()}>
         <input {...getInputProps()} />

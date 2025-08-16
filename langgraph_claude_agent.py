@@ -20,14 +20,27 @@ class AgentState(TypedDict):
     error: Optional[str]
 
 class ClaudeCodeAgent:
-    def __init__(self, permission_mode: str = "acceptEdits"):
+    def __init__(self, permission_mode: str = "acceptEdits", session_directory: Optional[Path] = None):
         self.permission_mode = permission_mode
+        self.session_directory = session_directory or Path.cwd()
+
+    def _validate_path(self, path: Path) -> bool:
+        """Validate that the path is within the session directory"""
+        try:
+            # Resolve both paths to absolute paths
+            session_abs = self.session_directory.resolve()
+            path_abs = path.resolve()
+
+            # Check if the path is within the session directory
+            return str(path_abs).startswith(str(session_abs))
+        except:
+            return False
 
     async def execute_claude_code(self, prompt: str) -> Dict[str, Any]:
-        # Omit max_turns entirely for unlimited turns
+        # Use session directory as working directory with path restrictions
         options = ClaudeCodeOptions(
             permission_mode=self.permission_mode,
-            cwd=Path.cwd(),  # Set current working directory
+            cwd=self.session_directory,  # Set session-specific working directory
             allowed_tools=["read_file", "list_files", "write_to_file", "replace_in_file", "execute_command"]  # Enable filesystem tools
         )
 
@@ -58,7 +71,7 @@ class ClaudeCodeAgent:
         """Stream Claude Code execution with real-time tool visibility"""
         options = ClaudeCodeOptions(
             permission_mode=self.permission_mode,
-            cwd=Path.cwd()
+            cwd=self.session_directory  # Use session-specific working directory
         )
 
         try:
@@ -122,8 +135,8 @@ class ClaudeCodeAgent:
             return f" {tool_name}"
 
 class ClaudeCodeAgentNodes:
-    def __init__(self):
-        self.claude_agent = ClaudeCodeAgent()
+    def __init__(self, session_directory: Optional[Path] = None):
+        self.claude_agent = ClaudeCodeAgent(session_directory=session_directory)
 
     async def claude_code_node(self, state: AgentState) -> AgentState:
         task = state.get("task", "")
@@ -158,8 +171,8 @@ class ClaudeCodeAgentNodes:
             }
 
 class ClaudeCodeLangGraphWorkflow:
-    def __init__(self):
-        self.agent_nodes = ClaudeCodeAgentNodes()
+    def __init__(self, session_directory: Optional[Path] = None):
+        self.agent_nodes = ClaudeCodeAgentNodes(session_directory=session_directory)
         self.workflow = self._build_workflow()
 
     def _build_workflow(self) -> StateGraph:

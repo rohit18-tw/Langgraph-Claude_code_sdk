@@ -201,10 +201,24 @@ function App() {
     }
   };
 
+  const handleStopGeneration = () => {
+    if (websocketRef.current && isLoading) {
+      websocketRef.current.close();
+      setIsLoading(false);
+      setCurrentProgress(null);
+      addMessage('system', 'Code generation stopped by user');
+
+      // Reconnect after a short delay
+      setTimeout(() => {
+        connectWebSocket();
+      }, 1000);
+    }
+  };
+
   return (
     <div className="App">
       <header className="App-header">
-        <h1>🤖 Claude Code Agent</h1>
+        <h1>FStratum</h1>
         <div className="connection-status">
           <span className={`status-indicator ${isConnected ? 'connected' : 'disconnected'}`}>
             {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
@@ -220,6 +234,7 @@ function App() {
             files={uploadedFiles}
             onClearSession={handleClearSession}
             sessionId={sessionId}
+            showOnlyUploaded={true}
           />
         </div>
 
@@ -230,6 +245,13 @@ function App() {
             isLoading={isLoading}
             isConnected={isConnected}
             currentProgress={currentProgress}
+            onStopGeneration={handleStopGeneration}
+          />
+          <FileList
+            files={uploadedFiles}
+            onClearSession={handleClearSession}
+            sessionId={sessionId}
+            showOnlyUploaded={false}
           />
         </div>
       </main>
