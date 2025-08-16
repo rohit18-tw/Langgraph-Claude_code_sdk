@@ -79,38 +79,27 @@ def create_session_directory(session_id: str) -> Path:
     session_dir.mkdir(exist_ok=True)
     return session_dir
 
-async def process_uploaded_files(session_id: str) -> str:
-    """Process uploaded files and create a context prompt"""
+async def create_session_context_message(session_id: str) -> str:
+    """Create a simple context message about uploaded files without reading their contents"""
     session_dir = UPLOAD_DIR / session_id
     if not session_dir.exists():
         return ""
 
-    context_parts = []
-    context_parts.append("## Uploaded Files Context:")
-
+    file_list = []
     for file_path in session_dir.rglob("*"):
         if file_path.is_file():
             relative_path = file_path.relative_to(session_dir)
             file_type = get_file_type(file_path.name)
+            file_list.append(f"- {relative_path} ({file_type})")
 
-            if file_type == 'text':
-                try:
-                    content = file_path.read_text(encoding='utf-8')
-                    context_parts.append(f"\n### File: {relative_path}")
-                    context_parts.append(f"```\n{content}\n```")
-                except Exception as e:
-                    context_parts.append(f"\n### File: {relative_path} (Error reading: {str(e)})")
-            elif file_type == 'image':
-                context_parts.append(f"\n### Image: {relative_path}")
-                context_parts.append(f"Image file uploaded: {file_path}")
-            elif file_type == 'pdf':
-                context_parts.append(f"\n### PDF: {relative_path}")
-                context_parts.append(f"PDF file uploaded: {file_path}")
-            else:
-                context_parts.append(f"\n### File: {relative_path} (Type: {file_type})")
+    if file_list:
+        context = "## Available Files:\n" + "\n".join(file_list)
+        context += "\n\nYou can read these files using the read_file tool to understand the context and work with them as needed."
+        return context
 
-    return "\n".join(context_parts)
+    return ""
 
+#to show generated files
 async def send_file_list_update(websocket: WebSocket, session_id: str):
     """Send updated file list to client"""
     try:
@@ -135,6 +124,7 @@ async def send_file_list_update(websocket: WebSocket, session_id: str):
     except Exception as e:
         logger.error(f"Error sending file updates: {str(e)}")
 
+#to show generated files
 async def monitor_files_during_execution(websocket: WebSocket, session_id: str, initial_files: set):
     """Monitor for new files created during execution and send updates"""
     session_dir = UPLOAD_DIR / session_id
@@ -211,11 +201,14 @@ async def upload_files(
 async def chat(request: ChatMessage):
     """Process chat message (non-streaming)"""
     try:
-        # Create workflow instance
-        workflow = ClaudeCodeLangGraphWorkflow()
+        # Create session directory path
+        session_dir = UPLOAD_DIR / request.session_id
 
-        # Process uploaded files context
-        file_context = await process_uploaded_files(request.session_id)
+        # Create workflow instance with session directory
+        workflow = ClaudeCodeLangGraphWorkflow(session_directory=session_dir)
+
+        # Create simple file context message
+        file_context = await create_session_context_message(request.session_id)
 
         # Combine user message with file context
         full_prompt = request.message
@@ -264,11 +257,14 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
             }))
 
             try:
-                # Create agent instance
-                agent = ClaudeCodeAgent()
+                # Create session directory path
+                session_dir = UPLOAD_DIR / session_id
 
-                # Process uploaded files context
-                file_context = await process_uploaded_files(session_id)
+                # Create agent instance with session directory
+                agent = ClaudeCodeAgent(session_directory=session_dir)
+
+                # Create simple file context message
+                file_context = await create_session_context_message(session_id)
 
                 # Combine user message with file context
                 full_prompt = user_message
@@ -276,7 +272,6 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                     full_prompt = f"{file_context}\n\n## User Request:\n{user_message}"
 
                 # Get initial file snapshot
-                session_dir = UPLOAD_DIR / session_id
                 initial_files = set()
                 if session_dir.exists():
                     for file_path in session_dir.rglob("*"):
