@@ -1,0 +1,121 @@
+CIBIL Mock API Service - Specification
+======================================
+
+Overview
+--------
+A standalone Spring Boot application designed to simulate the behavior of the real CIBIL bureau API in development and testing environments. This mock service helps verify the main application’s response handling for different borrower scenarios without requiring live connectivity to the real bureau.
+
+Purpose
+-------
+- Simulate CIBIL credit report responses for application testing
+- Enable behavior validation under strong, weak, incomplete, and error scenarios
+- Offer traceability, configurability, and isolated deployment from production services
+
+Technical Requirements
+----------------------
+- Spring Boot version: 3.2.3 (or compatible)
+- Java version: 21
+- Server Port: 8083
+- OpenAPI/Swagger documentation included
+- Basic Authentication (optional, for simulating secure integrations)
+- In-memory storage of requests for auditing/testing
+- Masking of sensitive borrower inputs in logs
+- Unique trace ID included in all transactions
+
+Implementation Details
+----------------------
+- DTOs
+- Enums (if applicable)
+- Controllers
+- Services (include mock logic as per spec)
+- Utility Classes (logging with PII masking)
+- Sample `application.yml`
+- Sample Swagger config
+- README with setup, test data, and usage
+
+API Endpoint
+------------
+1. CIBIL Credit Check Endpoint
+   - Path: /api/cibil/internal/v1/credit-check
+   - Method: POST
+   - Request Body:
+     {
+       "name": "Alice Johnson",
+       "pan": "ABCDE1234A",
+       "dob": "1990-05-20",
+       "mobile": "9876543210",
+       "loanPurpose": "Home Loan"
+     }
+   - Response Body (example):
+     {
+       "pan": "ABCDE1234A",
+       "score": 720,
+       "riskCategory": "Low Risk",
+       "eligibility": "Eligible",
+       "timestamp": "2025-05-23T10:00:00Z",
+       "transactionId": "TXN789456"
+     }
+
+Simulated Behavior Logic
+-------------------------
+- PAN ends with 'A' → Simulate strong borrower profile
+  - Score: 720
+  - Risk Category: "Low Risk"
+  - Eligibility: "Eligible"
+
+- PAN ends with 'B' → Simulate weak borrower profile
+  - Score: 600
+  - Risk Category: "High Risk"
+  - Eligibility: "Not Eligible"
+
+- PAN ends with 'C' → Simulate incomplete data response
+  - Missing "dob" in the response
+  - Score still provided (e.g., 680)
+  - Risk Category: "Medium Risk"
+
+- PAN ends with 'D' → Simulate system problem
+  - Respond with HTTP 500
+  - Include an error message like "CIBIL service unavailable"
+
+Security
+--------
+- Mask sensitive fields (PAN, mobile, DOB) in all logs
+- Use a unique "X-Trace-Id" in request/response headers
+- Optional basic authentication to mimic production API protections
+
+Admin & Configuration Interface
+-------------------------------
+- GET  /api/cibil/internal/v1/admin/requests     → View masked request history
+- POST /api/cibil/internal/v1/admin/config       → Modify response behaviors (score, risk)
+- POST /api/cibil/internal/v1/admin/reset        → Reset history and configurations
+
+Service Layer Components
+------------------------
+- MockCibilService: Core logic for scenario simulation
+- MockConfigService: Runtime control of scoring logic
+- TraceLoggerService: Manages traceable, masked logging
+
+Testing Strategy
+----------------
+- Test various PAN suffixes ('A', 'B', 'C', 'D') using Swagger/Postman
+- Validate correctness of:
+  - Credit score and categories
+  - Missing fields for incomplete data simulation
+  - HTTP 500 response for system errors
+- Check trace ID propagation and log masking
+- Use admin endpoints to override or reset behavior
+
+README Deliverables
+-------------------
+- Step-by-step setup for running the mock service
+- Sample request and expected response examples
+- Admin interface usage guide
+- Description of all configurable behaviors
+- Swagger URL for interactive testing
+
+Extensibility Suggestions
+-------------------------
+- Add custom risk profile configuration via admin endpoint
+- Extend scenarios (e.g., fraud alerts, bureau freeze)
+- Add response randomizer for stress testing
+- Integrate with test data generators for bulk simulations

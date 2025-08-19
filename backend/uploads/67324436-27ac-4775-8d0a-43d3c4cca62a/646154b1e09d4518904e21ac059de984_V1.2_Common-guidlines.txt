@@ -1,0 +1,53 @@
+Common Guidelines (Cross-Language)
+==================================
+
+Configuration-Driven Design
+---------------------------
+- All configuration (endpoints, secrets, retry logic, ports, timeouts, etc.) must be externalized.
+- Use config files (e.g., `application.yml` / `.env` / `config.json`) or environment variables.
+- Absolutely **no hardcoded values** should be present **anywhere** in the project.
+- This includes (but is not limited to): API URLs, paths, ports, feature flags, timeouts, constant values, and environment-specific settings.
+- All such values **must** be loaded from configuration files or environment variables.
+- This ensures ease of modification and promotes environment portability.
+- Access configuration via dependency injection or environment APIs provided by the language/framework.
+
+Environment and Deployment
+---------------------------
+- Server port must be configurable via an environment variable (e.g., `SERVER_PORT`).
+- Use proper CORS configuration:
+  - For general application CORS (API requests), use a `WebMvcConfigurer` or `CorsConfigurationSource` bean.
+  - For Swagger UI access specifically, configure CORS within `OpenApiConfig.java`.
+  - In development, allow all origins; in production, restrict using a configurable allowlist.
+
+
+
+Routing Conventions
+--------------------
+- The context path should follow this pattern:
+  - Original service: `/api/{capability-name}`
+  - Mock service: `/api/{capability-name}/internal`
+
+Health Checks
+-------------
+- Every service (original and mock) must expose:
+  - `/health/ready`
+  - `/health/live`
+- Health endpoints must follow structured URIs:  
+  `/v1/{capability-name}/{mode}/health`
+
+General Best Practices
+-----------------------
+- Ensure data privacy:
+  - Do not store unnecessary PII.
+  - Mask or redact sensitive fields in logs (Aadhaar, PAN, etc.).
+  - Use encryption or hashing where needed.
+
+- Ensure code is:
+  - Audit-ready  
+  - Validated with proper constraints (e.g., `@NotNull`, regex patterns, custom rules)  
+  - Error-tolerant with standardized exception handling
+
+- All services must:
+  - Be independently runnable  
+  - Integrate with the mock third-party service during dev/test phases  
+  - Use OpenAPI spec for interface definition (`swagger/{capability-name}-[original|mock]-openapi.yaml`)

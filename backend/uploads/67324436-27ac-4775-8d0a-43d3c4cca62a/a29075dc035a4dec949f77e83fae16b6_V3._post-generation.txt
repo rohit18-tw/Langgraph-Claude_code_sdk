@@ -1,0 +1,34 @@
+Audit-Ready Logging (All Services)
+----------------------------------
+Each service must implement structured, audit-ready logging to ensure traceability and compliance. This includes:
+- Logging request initiation with timestamp and transaction identifiers
+- Logging input/output data with all sensitive fields (e.g., Aadhaar, PAN, Name) **masked or redacted**
+- Capturing all failures, retries, and backoff attempts with retry count
+- Logging final response or status with success/failure indicator
+- Including a reference ID in all logs to enable end-to-end traceability across services
+
+Graceful Error Management
+-------------------------
+Error handling must be consistent, secure, and transparent:
+- Use a **standardized error response structure** with fields like `errorCode`, `message`, `timestamp`, and `traceId`
+- Log full error stack traces with masked sensitive information
+- Implement fallback logic for all third-party or mock integrations
+- Enforce data retention and purge policies, validated through automated tests
+
+Test Coverage (All Services)
+-----------------------------------------
+The service test suite must ensure exhaustive validation of functionality and edge cases:
+- Test both valid and invalid inputs with proper assertions
+- Cover success and failure scenarios for each external integration
+- Include edge cases such as pattern-based triggers or boundary input values
+- Test retry logic with mock failures and ensure graceful fallback behavior
+- Validate enforcement of data retention rules and record expiry
+
+Audit & Error Logging Validation
+-------------------------------
+The test cases must verify logging and error handling logic:
+- Assert that all logs redact or mask sensitive PII fields
+- Ensure each transaction can be traced using a unique reference ID
+- Simulate failures and validate that correct, predefined error codes are logged
+- Include regression tests to prevent accidental log exposure or missing audit entries
+
