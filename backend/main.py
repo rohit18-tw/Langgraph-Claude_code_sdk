@@ -201,8 +201,8 @@ async def upload_files(
 async def chat(request: ChatMessage):
     """Process chat message (non-streaming)"""
     try:
-        # Create session directory path
-        session_dir = UPLOAD_DIR / request.session_id
+        # Create session directory (ensure it exists)
+        session_dir = create_session_directory(request.session_id)
 
         # Create workflow instance with session directory
         workflow = ClaudeCodeLangGraphWorkflow(session_directory=session_dir)
@@ -257,8 +257,8 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
             }))
 
             try:
-                # Create session directory path
-                session_dir = UPLOAD_DIR / session_id
+                # Create session directory (ensure it exists)
+                session_dir = create_session_directory(session_id)
 
                 # Create agent instance with session directory
                 agent = ClaudeCodeAgent(session_directory=session_dir)

@@ -40,7 +40,7 @@ class ClaudeCodeAgent:
         # Use session directory as working directory with path restrictions
         options = ClaudeCodeOptions(
             permission_mode=self.permission_mode,
-            cwd=self.session_directory,  # Set session-specific working directory
+            cwd=self.session_directory.resolve(),  # Set session-specific working directory (absolute path)
             allowed_tools=["read_file", "list_files", "write_to_file", "replace_in_file", "execute_command"]  # Enable filesystem tools
         )
 
@@ -71,7 +71,7 @@ class ClaudeCodeAgent:
         """Stream Claude Code execution with real-time tool visibility"""
         options = ClaudeCodeOptions(
             permission_mode=self.permission_mode,
-            cwd=self.session_directory  # Use session-specific working directory
+            cwd=self.session_directory.resolve()  # Use session-specific working directory (absolute path)
         )
 
         try:
