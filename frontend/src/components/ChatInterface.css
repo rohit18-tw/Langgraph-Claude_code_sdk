@@ -7,8 +7,8 @@
 
 .chat-header {
   padding: 0.75rem 1rem;
-  border-bottom: 1px solid #e5e7eb;
-  background-color: #f9fafb;
+  border-bottom: 1px solid #e0e0e0;
+  background-color: #f5f5f5;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -16,7 +16,7 @@
 
 .chat-header h3 {
   margin: 0;
-  color: #374151;
+  color: #333333;
   font-size: 0.95rem;
   font-weight: 600;
 }
@@ -28,13 +28,13 @@
 }
 
 .loading-indicator {
-  color: #2563eb;
+  color: #666666;
   font-size: 0.8rem;
   font-weight: 500;
 }
 
 .connection-warning {
-  color: #dc2626;
+  color: #666666;
   font-size: 0.8rem;
   font-weight: 500;
 }
@@ -61,30 +61,30 @@
 
 .welcome-content h4 {
   margin: 0 0 1rem 0;
-  color: #374151;
+  color: #333333;
   font-size: 1.25rem;
   font-weight: 700;
 }
 
 .welcome-content p {
-  color: #6b7280;
+  color: #666666;
   margin-bottom: 1.5rem;
   line-height: 1.6;
   font-size: 0.95rem;
 }
 
 .example-prompts {
-  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-  color: white;
+  background-color: #f5f5f5;
+  color: #333333;
   padding: 1.5rem;
-  border-radius: 12px;
+  border-radius: 8px;
   text-align: left;
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15);
+  border: 1px solid #e0e0e0;
 }
 
 .example-prompts p {
   margin: 0 0 0.75rem 0;
-  color: white;
+  color: #333333;
   font-weight: 600;
   font-size: 0.95rem;
 }
@@ -96,7 +96,7 @@
 }
 
 .example-prompts li {
-  color: rgba(255, 255, 255, 0.9);
+  color: #666666;
   margin-bottom: 0.5rem;
   line-height: 1.5;
   position: relative;
@@ -109,7 +109,7 @@
   position: absolute;
   left: 0;
   top: 0;
-  color: rgba(255, 255, 255, 0.7);
+  color: #999999;
 }
 
 .message {
@@ -122,38 +122,36 @@
 }
 
 .message.user .message-content {
-  background-color: #2563eb;
+  background-color: #333333;
   color: white;
   margin-left: auto;
 }
 
 .message.assistant .message-content {
-  background-color: #f9fafb;
-  border: 1px solid #e5e7eb;
+  background-color: #f5f5f5;
+  border: 1px solid #e0e0e0;
 }
 
 .message.system .message-content {
-  background-color: #eff6ff;
-  border: 1px solid #bfdbfe;
+  background-color: #f0f0f0;
+  border: 1px solid #d0d0d0;
 }
 
 .message.tool .message-content {
-  background-color: #f3f4f6;
-  border: 1px solid #d1d5db;
+  background-color: #f8f8f8;
+  border: 1px solid #e0e0e0;
 }
 
 .message.error .message-content {
-  background-color: #fef2f2;
-  border: 1px solid #fecaca;
-  color: #dc2626;
+  background-color: #f8f8f8;
+  border: 1px solid #d0d0d0;
+  color: #666666;
 }
 
 .message.progress .message-content {
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-  color: white;
-  border: none;
-  animation: progressPulse 1.5s ease-in-out infinite;
-  box-shadow: 0 2px 6px rgba(245, 158, 11, 0.25);
+  background-color: #f0f0f0;
+  color: #333333;
+  border: 1px solid #d0d0d0;
 }
 
 .message.progress .message-text {
@@ -167,8 +165,8 @@
   content: "";
   width: 14px;
   height: 14px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-top: 2px solid white;
+  border: 2px solid #d0d0d0;
+  border-top: 2px solid #666666;
   border-radius: 50%;
   animation: progressSpin 1s linear infinite;
 }
@@ -186,13 +184,13 @@
 }
 
 .progress-text {
-  color: #6b7280;
+  color: #666666;
   font-weight: 500;
   flex: 1;
 }
 
 .stop-button {
-  background-color: #dc2626;
+  background-color: #666666;
   color: white;
   border: none;
   padding: 0.3rem 0.6rem;
@@ -208,18 +206,7 @@
 }
 
 .stop-button:hover {
-  background-color: #b91c1c;
-}
-
-@keyframes progressPulse {
-  0%, 100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-  50% {
-    transform: scale(1.02);
-    opacity: 0.9;
-  }
+  background-color: #555555;
 }
 
 @keyframes progressSpin {
@@ -245,11 +232,11 @@
 
 .message-sender {
   font-weight: 600;
-  color: #6b7280;
+  color: #666666;
 }
 
 .message-timestamp {
-  color: #9ca3af;
+  color: #999999;
   font-size: 0.75rem;
   margin-left: auto;
 }
@@ -272,21 +259,21 @@
 }
 
 .message-content pre {
-  background-color: #f3f4f6;
+  background-color: #f8f8f8;
   padding: 0.75rem;
   border-radius: 6px;
   overflow-x: auto;
   font-size: 0.8rem;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #e0e0e0;
   margin: 0.5rem 0;
 }
 
 .message-content code {
-  background-color: #f3f4f6;
+  background-color: #f0f0f0;
   padding: 0.15rem 0.3rem;
   border-radius: 3px;
   font-size: 0.85rem;
-  color: #dc2626;
+  color: #333333;
 }
 
 .message-content pre code {
@@ -298,20 +285,20 @@
 .message-metadata {
   margin-top: 0.5rem;
   padding-top: 0.5rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.2);
+  border-top: 1px solid #e0e0e0;
 }
 
 .message.assistant .message-metadata,
 .message.system .message-metadata,
 .message.tool .message-metadata {
-  border-top: 1px solid #e5e7eb;
+  border-top: 1px solid #e0e0e0;
 }
 
 .execution-stats {
   display: flex;
   gap: 0.75rem;
   font-size: 0.75rem;
-  color: #6b7280;
+  color: #666666;
 }
 
 .execution-stats span {
@@ -322,7 +309,7 @@
 
 .message-input-form {
   padding: 1rem;
-  border-top: 1px solid #e5e7eb;
+  border-top: 1px solid #e0e0e0;
   background-color: white;
 }
 
@@ -335,7 +322,7 @@
 .message-input {
   flex: 1;
   padding: 0.75rem 1rem;
-  border: 2px solid #e5e7eb;
+  border: 2px solid #e0e0e0;
   border-radius: 20px;
   font-size: 0.9rem;
   line-height: 1.5;
@@ -344,25 +331,24 @@
   max-height: 100px;
   font-family: inherit;
   transition: all 0.2s ease;
-  background-color: #f9fafb;
+  background-color: #f5f5f5;
 }
 
 .message-input:focus {
-  border-color: #2563eb;
+  border-color: #666666;
   outline: none;
   background-color: white;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
 }
 
 .message-input:disabled {
-  background-color: #f3f4f6;
-  color: #9ca3af;
+  background-color: #f8f8f8;
+  color: #999999;
   cursor: not-allowed;
 }
 
 .send-button {
   padding: 0.75rem;
-  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  background-color: #333333;
   color: white;
   border: none;
   border-radius: 50%;
@@ -374,25 +360,21 @@
   justify-content: center;
   width: 44px;
   height: 44px;
-  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
 }
 
 .send-button:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+  background-color: #555555;
 }
 
 .send-button:disabled {
-  background: #d1d5db;
+  background: #d0d0d0;
   cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
 }
 
 .input-stats {
   margin-top: 0.4rem;
   font-size: 0.75rem;
-  color: #9ca3af;
+  color: #999999;
   text-align: right;
 }
 

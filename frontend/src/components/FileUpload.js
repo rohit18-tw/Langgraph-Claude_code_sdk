@@ -24,8 +24,7 @@ const FileUpload = ({ onFileUpload }) => {
     getRootProps,
     getInputProps,
     isDragActive,
-    isDragReject,
-    acceptedFiles
+    isDragReject
   } = useDropzone({
     onDrop,
     multiple: true,
@@ -46,25 +45,6 @@ const FileUpload = ({ onFileUpload }) => {
     if (isDragReject) className += ' reject';
     if (uploading) className += ' uploading';
     return className;
-  };
-
-  const formatFileSize = (bytes) => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  };
-
-  const getFileIcon = (file) => {
-    const extension = file.name.split('.').pop().toLowerCase();
-
-    if (['txt', 'md'].includes(extension)) return '📄';
-    if (['py', 'js', 'jsx', 'ts', 'tsx', 'html', 'css', 'json'].includes(extension)) return '💻';
-    if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'bmp'].includes(extension)) return '🖼️';
-    if (extension === 'pdf') return '📕';
-    if (['zip', 'tar', 'gz'].includes(extension)) return '📦';
-    return '📄';
   };
 
   return (

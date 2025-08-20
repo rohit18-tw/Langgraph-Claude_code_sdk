@@ -4,6 +4,7 @@ import axios from 'axios';
 import FileUpload from './components/FileUpload';
 import ChatInterface from './components/ChatInterface';
 import FileList from './components/FileList';
+import ConnectionStatus from './components/ConnectionStatus';
 import './App.css';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
@@ -18,42 +19,27 @@ function App() {
   const websocketRef = useRef(null);
 
   useEffect(() => {
-    // Initialize WebSocket connection
     connectWebSocket();
-
-    // Load existing files for session
     loadSessionFiles();
-
-    return () => {
-      if (websocketRef.current) {
-        websocketRef.current.close();
-      }
-    };
+    return () => websocketRef.current?.close();
   }, [sessionId]);
 
   const connectWebSocket = () => {
-    const wsBaseUrl = process.env.REACT_APP_WS_URL || API_BASE_URL.replace('http', 'ws');
+    const wsBaseUrl = process.env.REACT_APP_WS_URL ||
+      API_BASE_URL.replace('https://', 'wss://').replace('http://', 'ws://');
     const wsUrl = `${wsBaseUrl}/ws/${sessionId}`;
     websocketRef.current = new WebSocket(wsUrl);
 
-    websocketRef.current.onopen = () => {
-      setIsConnected(true);
-    };
-
-    websocketRef.current.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      handleWebSocketMessage(data);
-    };
-
+    websocketRef.current.onopen = () => setIsConnected(true);
     websocketRef.current.onclose = () => {
       setIsConnected(false);
       setIsLoading(false);
       setCurrentProgress(null);
       setTimeout(connectWebSocket, 3000);
     };
-
-    websocketRef.current.onerror = (error) => {
-      setIsConnected(false);
+    websocketRef.current.onerror = () => setIsConnected(false);
+    websocketRef.current.onmessage = (event) => {
+      handleWebSocketMessage(JSON.parse(event.data));
     };
   };
 
@@ -61,10 +47,6 @@ function App() {
     const { type, message, timestamp, ...rest } = data;
 
     switch (type) {
-      case 'status':
-        break;
-      case 'tool_use':
-        break;
       case 'file_generation':
         setCurrentProgress(message || 'Processing...');
         break;
@@ -84,11 +66,8 @@ function App() {
       case 'files_updated':
         setUploadedFiles(rest.files || []);
         break;
-      default:
-        break;
     }
   };
-
 
   const addMessage = (sender, content, metadata = {}) => {
     const newMessage = {
@@ -103,14 +82,9 @@ function App() {
 
   const loadSessionFiles = async () => {
     try {
-      console.log('Loading files for session:', sessionId);
-      console.log('API URL:', `${API_BASE_URL}/sessions/${sessionId}/files`);
       const response = await axios.get(`${API_BASE_URL}/sessions/${sessionId}/files`, {
-        headers: {
-          'ngrok-skip-browser-warning': 'true'
-        }
+        headers: { 'ngrok-skip-browser-warning': 'true' }
       });
-      console.log('Files response:', response.data);
       setUploadedFiles(response.data.files || []);
     } catch (error) {
       console.error('Error loading session files:', error);
@@ -121,26 +95,17 @@ function App() {
   const handleFileUpload = async (files) => {
     try {
       const formData = new FormData();
-      files.forEach(file => {
-        formData.append('files', file);
+      files.forEach(file => formData.append('files', file));
+
+      await axios.post(`${API_BASE_URL}/upload?session_id=${sessionId}`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          'ngrok-skip-browser-warning': 'true'
+        },
       });
 
-      const response = await axios.post(
-        `${API_BASE_URL}/upload?session_id=${sessionId}`,
-        formData,
-        {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-            'ngrok-skip-browser-warning': 'true'
-          },
-        }
-      );
-
-      // Reload session files
       await loadSessionFiles();
-
       addMessage('system', `Uploaded ${files.length} file(s) successfully`);
-      return response.data;
     } catch (error) {
       addMessage('error', `Failed to upload files: ${error.message}`);
       throw error;
@@ -150,13 +115,11 @@ function App() {
   const handleSendMessage = async (message) => {
     if (!message.trim()) return;
 
-    // Add user message to chat
     addMessage('user', message);
     setIsLoading(true);
     setCurrentProgress('Processing your request...');
 
     if (isConnected && websocketRef.current) {
-      // Send via WebSocket for real-time streaming
       websocketRef.current.send(JSON.stringify({
         message: message,
         session_id: sessionId
@@ -189,9 +152,7 @@ function App() {
   const handleClearSession = async () => {
     try {
       await axios.delete(`${API_BASE_URL}/sessions/${sessionId}`, {
-        headers: {
-          'ngrok-skip-browser-warning': 'true'
-        }
+        headers: { 'ngrok-skip-browser-warning': 'true' }
       });
       setUploadedFiles([]);
       setMessages([]);
@@ -207,11 +168,7 @@ function App() {
       setIsLoading(false);
       setCurrentProgress(null);
       addMessage('system', 'Code generation stopped by user');
-
-      // Reconnect after a short delay
-      setTimeout(() => {
-        connectWebSocket();
-      }, 1000);
+      setTimeout(connectWebSocket, 1000);
     }
   };
 
@@ -219,12 +176,7 @@ function App() {
     <div className="App">
       <header className="App-header">
         <h1>FStratum</h1>
-        <div className="connection-status">
-          <span className={`status-indicator ${isConnected ? 'connected' : 'disconnected'}`}>
-            {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
-          </span>
-          <span className="session-id">Session: {sessionId.substring(0, 8)}...</span>
-        </div>
+        <ConnectionStatus isConnected={isConnected} sessionId={sessionId} />
       </header>
 
       <main className="App-main">
@@ -234,7 +186,7 @@ function App() {
             files={uploadedFiles}
             onClearSession={handleClearSession}
             sessionId={sessionId}
-            showOnlyUploaded={true}
+            showUploadedOnly={true}
           />
         </div>
 
@@ -251,7 +203,7 @@ function App() {
             files={uploadedFiles}
             onClearSession={handleClearSession}
             sessionId={sessionId}
-            showOnlyUploaded={false}
+            showUploadedOnly={false}
           />
         </div>
       </main>

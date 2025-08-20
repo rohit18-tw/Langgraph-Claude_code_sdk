@@ -10,7 +10,7 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-color: #f5f5f5;
-  color: #2d3748;
+  color: #333333;
   line-height: 1.6;
 }
 
@@ -191,27 +191,27 @@ input, textarea {
 
 /* Color utilities */
 .text-gray-500 {
-  color: #718096;
+  color: #999999;
 }
 
 .text-gray-600 {
-  color: #4a5568;
+  color: #666666;
 }
 
 .text-gray-700 {
-  color: #2d3748;
+  color: #333333;
 }
 
-.text-blue-600 {
-  color: #3182ce;
+.text-dark {
+  color: #333333;
 }
 
-.text-red-600 {
-  color: #e53e3e;
+.text-medium {
+  color: #666666;
 }
 
-.text-green-600 {
-  color: #38a169;
+.text-light {
+  color: #999999;
 }
 
 .bg-white {
@@ -219,23 +219,19 @@ input, textarea {
 }
 
 .bg-gray-50 {
-  background-color: #f7fafc;
+  background-color: #f8f8f8;
 }
 
 .bg-gray-100 {
-  background-color: #edf2f7;
+  background-color: #f0f0f0;
 }
 
-.bg-blue-50 {
-  background-color: #ebf8ff;
+.bg-light {
+  background-color: #f5f5f5;
 }
 
-.bg-red-50 {
-  background-color: #fed7d7;
-}
-
-.bg-green-50 {
-  background-color: #f0fff4;
+.bg-medium {
+  background-color: #f0f0f0;
 }
 
 /* Loading animation */
