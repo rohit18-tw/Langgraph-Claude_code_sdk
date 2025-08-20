@@ -2,10 +2,12 @@ import React, { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import './ChatInterface.css';
 
-const ChatInterface = ({ messages, onSendMessage, isLoading, isConnected, currentProgress, onStopGeneration }) => {
+const ChatInterface = ({ messages, onSendMessage, onFileUpload, isLoading, isConnected, currentProgress, onStopGeneration, uploadedFiles }) => {
   const [inputMessage, setInputMessage] = useState('');
+  const [showFileUpload, setShowFileUpload] = useState(false);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     scrollToBottom();
@@ -84,6 +86,22 @@ const ChatInterface = ({ messages, onSendMessage, isLoading, isConnected, curren
         )}
       </div>
     );
+  };
+
+  const handleFileUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length > 0 && onFileUpload) {
+      try {
+        await onFileUpload(files);
+        e.target.value = ''; // Reset file input
+      } catch (error) {
+        console.error('File upload failed:', error);
+      }
+    }
   };
 
   return (
@@ -167,28 +185,57 @@ const ChatInterface = ({ messages, onSendMessage, isLoading, isConnected, curren
 
       <form className="message-input-form" onSubmit={handleSubmit}>
         <div className="input-container">
-          <textarea
-            ref={inputRef}
-            value={inputMessage}
-            onChange={(e) => setInputMessage(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder={
-              isConnected
-                ? "Type your message... (Shift+Enter for new line)"
-                : "Offline - messages will be sent when connection is restored"
-            }
+          <button
+            type="button"
+            onClick={handleFileUploadClick}
+            className="file-upload-button"
+            title="Upload files"
             disabled={isLoading}
-            rows={1}
-            className="message-input"
+          >
+            +
+          </button>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            onChange={handleFileChange}
+            className="hidden-file-input"
+            accept=".txt,.md,.js,.jsx,.ts,.tsx,.py,.html,.css,.json,.xml,.yml,.yaml"
           />
+
+          <div className="input-wrapper">
+            <textarea
+              ref={inputRef}
+              value={inputMessage}
+              onChange={(e) => setInputMessage(e.target.value)}
+              onKeyPress={handleKeyPress}
+              placeholder={
+                isConnected
+                  ? "Type your message... (Shift+Enter for new line)"
+                  : "Offline - messages will be sent when connection is restored"
+              }
+              disabled={isLoading}
+              rows={1}
+              className="message-input"
+            />
+          </div>
+
           <button
             type="submit"
             disabled={!inputMessage.trim() || isLoading}
             className="send-button"
           >
-            {isLoading ? '●' : 'Send'}
+            {isLoading ? '●' : '→'}
           </button>
         </div>
+
+        {/* Show uploaded files count */}
+        {uploadedFiles && uploadedFiles.length > 0 && (
+          <div className="uploaded-files-indicator">
+            <span className="files-count">{uploadedFiles.length} file(s) uploaded</span>
+          </div>
+        )}
 
         {inputMessage.length > 0 && (
           <div className="input-stats">

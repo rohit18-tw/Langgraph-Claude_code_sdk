@@ -10,24 +10,36 @@ from langgraph_claude_agent import ClaudeCodeAgent, ClaudeCodeLangGraphWorkflow
 from services.file_service import FileService
 
 class ClaudeService:
+    # Store active workflows for session management
+    _active_workflows: Dict[str, ClaudeCodeLangGraphWorkflow] = {}
+
     @staticmethod
     async def process_chat_message(session_id: str, message: str) -> Dict[str, Any]:
-        """Process chat message using Claude agent"""
+        """Process chat message using Claude agent with built-in session persistence"""
         try:
             session_dir = FileService.create_session_directory(session_id)
-            workflow = ClaudeCodeLangGraphWorkflow(session_directory=session_dir)
 
-            # Create file context
-            file_context = FileService.create_context_message(session_id)
-            full_prompt = f"{file_context}\n\n## User Request:\n{message}" if file_context else message
+            # Get or create workflow with session management
+            if session_id not in ClaudeService._active_workflows:
+                # Create new workflow with session continuity enabled
+                workflow = ClaudeCodeLangGraphWorkflow(
+                    session_directory=session_dir,
+                    session_id=None  # New session - will enable continue_conversation
+                )
+                ClaudeService._active_workflows[session_id] = workflow
+            else:
+                # Use existing workflow - session continuity is automatic
+                workflow = ClaudeService._active_workflows[session_id]
 
-            result = await workflow.run_task(full_prompt)
+            # Use built-in session management - no manual context needed
+            # The SDK automatically handles memory and session persistence
+            result = await workflow.continue_conversation(message)
 
             return {
-                "success": result["success"],
-                "message": result.get("result", "Task completed") if result["success"] else result.get("error", "Unknown error"),
-                "session_id": session_id,
-                "metadata": result.get("metadata")
+                "success": result.get("error") is None,
+                "message": result.get("result", "Task completed") if result.get("error") is None else result.get("error", "Unknown error"),
+                "session_id": result.get("session_id", session_id),
+                "metadata": result.get("metadata", {})
             }
         except Exception as e:
             return {
@@ -35,6 +47,42 @@ class ClaudeService:
                 "message": f"Error: {str(e)}",
                 "session_id": session_id
             }
+
+    @staticmethod
+    async def resume_session(original_session_id: str, session_id: str, message: str) -> Dict[str, Any]:
+        """Resume a specific session by ID"""
+        try:
+            session_dir = FileService.create_session_directory(original_session_id)
+
+            # Create workflow with session resumption
+            workflow = ClaudeCodeLangGraphWorkflow(session_directory=session_dir)
+
+            # Resume the specific session
+            result = await workflow.resume_session(session_id, message)
+
+            # Store the resumed workflow
+            ClaudeService._active_workflows[original_session_id] = workflow
+
+            return {
+                "success": result.get("error") is None,
+                "message": result.get("result", "Task completed") if result.get("error") is None else result.get("error", "Unknown error"),
+                "session_id": result.get("session_id", session_id),
+                "metadata": result.get("metadata", {})
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "message": f"Error: {str(e)}",
+                "session_id": original_session_id
+            }
+
+    @staticmethod
+    async def cleanup_session(session_id: str):
+        """Cleanup session resources"""
+        if session_id in ClaudeService._active_workflows:
+            workflow = ClaudeService._active_workflows[session_id]
+            await workflow.cleanup()
+            del ClaudeService._active_workflows[session_id]
 
     @staticmethod
     async def send_websocket_message(websocket: WebSocket, message_type: str, message: str, **kwargs):

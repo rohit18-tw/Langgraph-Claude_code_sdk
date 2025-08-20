@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import TypedDict, List, Optional, Any, Dict, AsyncGenerator
 from langgraph.graph import StateGraph, END
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
-from claude_code_sdk import query, ClaudeCodeOptions, Message
+from claude_code_sdk import query, ClaudeCodeOptions, ClaudeSDKClient, Message
 import json
 
 load_dotenv()
@@ -20,47 +20,70 @@ class AgentState(TypedDict):
     error: Optional[str]
 
 class ClaudeCodeAgent:
-    def __init__(self, permission_mode: str = "acceptEdits", session_directory: Optional[Path] = None):
+    def __init__(self, permission_mode: str = "acceptEdits", session_directory: Optional[Path] = None, session_id: Optional[str] = None):
         self.permission_mode = permission_mode
         self.session_directory = session_directory or Path.cwd()
+        self.session_id = session_id  # For session resumption
+        self.client = None  # Will be initialized when needed
 
-    def _validate_path(self, path: Path) -> bool:
-        """Validate that the path is within the session directory"""
-        try:
-            # Resolve both paths to absolute paths
-            session_abs = self.session_directory.resolve()
-            path_abs = path.resolve()
+    async def _get_client(self) -> ClaudeSDKClient:
+        """Get or create Claude SDK client with session persistence"""
+        if self.client is None:
+            options = ClaudeCodeOptions(
+                permission_mode=self.permission_mode,
+                cwd=self.session_directory.resolve(),
+                # Enable session continuity
+                continue_conversation=True if not self.session_id else False,
+                # Resume specific session if provided
+                resume=self.session_id,
+                # Enable more tools including web capabilities
+                allowed_tools=["Read", "Write", "Edit", "Bash", "LS", "Grep", "WebFetch", "WebSearch"],
+                max_turns=10
+            )
+            self.client = ClaudeSDKClient(options=options)
+            await self.client.connect()
+        return self.client
 
-            # Check if the path is within the session directory
-            return str(path_abs).startswith(str(session_abs))
-        except:
-            return False
+    async def close(self):
+        """Close the client connection"""
+        if self.client:
+            await self.client.disconnect()
+            self.client = None
 
     async def execute_claude_code(self, prompt: str) -> Dict[str, Any]:
-        # Use session directory as working directory with path restrictions
-        options = ClaudeCodeOptions(
-            permission_mode=self.permission_mode,
-            cwd=self.session_directory.resolve(),  # Set session-specific working directory (absolute path)
-            allowed_tools=["read_file", "list_files", "write_to_file", "replace_in_file", "execute_command"]  # Enable filesystem tools
-        )
-
+        """Execute prompt with built-in session persistence and memory"""
         result_data = {
             "result": None,
             "metadata": {},
-            "error": None
+            "error": None,
+            "session_id": None
         }
 
         try:
-            async for message in query(prompt=prompt, options=options):
-                # Capture the final result
-                if hasattr(message, 'subtype') and message.subtype == 'success':
-                    result_data["result"] = getattr(message, 'result', None)
+            client = await self._get_client()
+
+            # Send query - session continuity is handled automatically by SDK
+            await client.query(prompt)
+
+            # Collect full response with metadata
+            full_response = []
+            async for message in client.receive_response():
+                if hasattr(message, 'content'):
+                    for block in message.content:
+                        if hasattr(block, 'text'):
+                            full_response.append(block.text)
+
+                # Capture result message with session metadata
+                if type(message).__name__ == "ResultMessage":
+                    result_data["result"] = ''.join(full_response)
                     result_data["metadata"] = {
                         "total_cost_usd": getattr(message, 'total_cost_usd', 0),
                         "duration_ms": getattr(message, 'duration_ms', 0),
                         "num_turns": getattr(message, 'num_turns', 0),
                         "session_id": getattr(message, 'session_id', None)
                     }
+                    result_data["session_id"] = getattr(message, 'session_id', None)
+                    break
 
         except Exception as e:
             result_data["error"] = str(e)
@@ -68,32 +91,34 @@ class ClaudeCodeAgent:
         return result_data
 
     async def execute_claude_code_streaming(self, prompt: str) -> AsyncGenerator[Dict[str, Any], None]:
-        """Stream Claude Code execution with real-time tool visibility"""
-        options = ClaudeCodeOptions(
-            permission_mode=self.permission_mode,
-            cwd=self.session_directory.resolve()  # Use session-specific working directory (absolute path)
-        )
-
+        """Stream Claude Code execution with built-in session persistence"""
         try:
-            async for message in query(prompt=prompt, options=options):
-                # Just pass through the messages from Claude Code SDK
+            client = await self._get_client()
+
+            # Send query with automatic session management
+            await client.query(prompt)
+
+            # Stream responses with full metadata
+            async for message in client.receive_response():
                 message_type = type(message).__name__
 
-                # Tool usage from AssistantMessage
-                if message_type == 'AssistantMessage' and hasattr(message, 'content'):
-                    for item in message.content:
-                        if hasattr(item, 'name') and hasattr(item, 'input'):
-                            tool_name = item.name
-                            tool_input = item.input
-
+                # Tool usage detection
+                if hasattr(message, 'content'):
+                    for block in message.content:
+                        if hasattr(block, 'type') and block.type == 'tool_use':
                             yield {
                                 "type": "tool_use",
-                                "tool_name": tool_name,
-                                "tool_input": tool_input
+                                "tool_name": block.name,
+                                "tool_input": block.input
+                            }
+                        elif hasattr(block, 'text'):
+                            yield {
+                                "type": "text",
+                                "content": block.text
                             }
 
-                # Final result
-                elif hasattr(message, 'subtype') and message.subtype == 'success':
+                # Final result with session metadata
+                if message_type == "ResultMessage":
                     yield {
                         "type": "success",
                         "result": getattr(message, 'result', None),
@@ -104,6 +129,7 @@ class ClaudeCodeAgent:
                             "session_id": getattr(message, 'session_id', None)
                         }
                     }
+                    break
 
         except Exception as e:
             yield {
@@ -111,6 +137,22 @@ class ClaudeCodeAgent:
                 "message": f"❌ Execution error: {str(e)}",
                 "error": str(e)
             }
+
+    async def continue_conversation(self, prompt: str) -> Dict[str, Any]:
+        """Continue existing conversation in same session"""
+        # Just call execute_claude_code - session continuity is automatic
+        return await self.execute_claude_code(prompt)
+
+    async def resume_session(self, session_id: str, prompt: str) -> Dict[str, Any]:
+        """Resume a specific session"""
+        # Close current client if exists
+        await self.close()
+
+        # Set session ID for resumption
+        self.session_id = session_id
+
+        # Execute with session resumption
+        return await self.execute_claude_code(prompt)
 
     def _format_tool_message(self, tool_name: str, tool_input: Dict[str, Any]) -> str:
         """Simple tool message formatting - same as command line"""
@@ -135,8 +177,8 @@ class ClaudeCodeAgent:
             return f" {tool_name}"
 
 class ClaudeCodeAgentNodes:
-    def __init__(self, session_directory: Optional[Path] = None):
-        self.claude_agent = ClaudeCodeAgent(session_directory=session_directory)
+    def __init__(self, session_directory: Optional[Path] = None, session_id: Optional[str] = None):
+        self.claude_agent = ClaudeCodeAgent(session_directory=session_directory, session_id=session_id)
 
     async def claude_code_node(self, state: AgentState) -> AgentState:
         task = state.get("task", "")
@@ -170,10 +212,15 @@ class ClaudeCodeAgentNodes:
                 "error": f"Error: {str(e)}"
             }
 
+    async def cleanup(self):
+        """Cleanup resources"""
+        await self.claude_agent.close()
+
 class ClaudeCodeLangGraphWorkflow:
-    def __init__(self, session_directory: Optional[Path] = None):
-        self.agent_nodes = ClaudeCodeAgentNodes(session_directory=session_directory)
+    def __init__(self, session_directory: Optional[Path] = None, session_id: Optional[str] = None):
+        self.agent_nodes = ClaudeCodeAgentNodes(session_directory=session_directory, session_id=session_id)
         self.workflow = self._build_workflow()
+        self.session_id = session_id
 
     def _build_workflow(self) -> StateGraph:
         workflow = StateGraph(AgentState)
@@ -199,6 +246,18 @@ class ClaudeCodeLangGraphWorkflow:
             "metadata": final_state.get("claude_code_metadata"),
             "error": final_state.get("error")
         }
+
+    async def continue_conversation(self, task: str) -> Dict[str, Any]:
+        """Continue conversation in the same session"""
+        return await self.agent_nodes.claude_agent.continue_conversation(task)
+
+    async def resume_session(self, session_id: str, task: str) -> Dict[str, Any]:
+        """Resume a specific session"""
+        return await self.agent_nodes.claude_agent.resume_session(session_id, task)
+
+    async def cleanup(self):
+        """Cleanup resources"""
+        await self.agent_nodes.cleanup()
 
 def get_user_prompt() -> str:
     # Check for piped input

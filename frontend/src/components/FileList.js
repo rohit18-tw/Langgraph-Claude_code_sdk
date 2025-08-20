@@ -16,9 +16,9 @@ const FileList = ({ files, onClearSession, sessionId, showUploadedOnly = false }
   // Filter files based on type
   const filteredFiles = showUploadedOnly
     ? files.filter(file => file.name.includes('_')) // Uploaded files have UUID prefix
-    : files.filter(file => !file.name.includes('_')); // Generated files don't
+    : files; // Show all files (both uploaded and generated) in Generated Files section
 
-  const displayTitle = showUploadedOnly ? 'Uploaded Files' : 'Generated Files';
+  const displayTitle = showUploadedOnly ? 'Uploaded Files' : 'All Files';
 
   const handleViewFile = async (file) => {
     setViewingFile(file);
