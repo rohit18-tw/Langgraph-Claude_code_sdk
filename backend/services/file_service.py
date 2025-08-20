@@ -40,9 +40,8 @@ class FileService:
             if not file.filename:
                 continue
 
-            # Create unique filename to avoid conflicts
-            unique_filename = f"{uuid.uuid4().hex}_{file.filename}"
-            file_path = session_dir / unique_filename
+            # Use original filename (overwrites if exists)
+            file_path = session_dir / file.filename
 
             # Save file
             with open(file_path, "wb") as buffer:
@@ -62,6 +61,9 @@ class FileService:
     @staticmethod
     def list_session_files(session_id: str) -> List[FileInfo]:
         """List all files for a session"""
+        # First migrate any old files with UUID prefixes
+        FileService.migrate_old_files(session_id)
+
         session_dir = UPLOAD_DIR / session_id
         if not session_dir.exists():
             return []
@@ -128,8 +130,35 @@ class FileService:
         return {"success": True, "message": f"Session {session_id} cleared"}
 
     @staticmethod
+    def migrate_old_files(session_id: str) -> dict:
+        """Migrate files with UUID prefixes to original names"""
+        session_dir = UPLOAD_DIR / session_id
+        if not session_dir.exists():
+            return {"success": True, "message": "No session directory found", "migrated": 0}
+
+        migrated_count = 0
+        for file_path in session_dir.rglob("*"):
+            if file_path.is_file():
+                filename = file_path.name
+                # Check if filename has UUID prefix pattern (32 hex chars + underscore)
+                if len(filename) > 33 and filename[32] == '_':
+                    # Extract original filename (everything after the UUID and underscore)
+                    original_name = filename[33:]
+                    if original_name:  # Make sure there's an actual filename
+                        new_path = file_path.parent / original_name
+                        # Only rename if the new name doesn't already exist
+                        if not new_path.exists():
+                            file_path.rename(new_path)
+                            migrated_count += 1
+
+        return {"success": True, "message": f"Migrated {migrated_count} files", "migrated": migrated_count}
+
+    @staticmethod
     def create_context_message(session_id: str) -> str:
         """Create context message about uploaded files"""
+        # First migrate any old files with UUID prefixes
+        FileService.migrate_old_files(session_id)
+
         session_dir = UPLOAD_DIR / session_id
         if not session_dir.exists():
             return ""

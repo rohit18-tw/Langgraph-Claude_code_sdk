@@ -15,7 +15,7 @@ const FileList = ({ files, onClearSession, sessionId, showUploadedOnly = false }
 
   // Filter files based on type
   const filteredFiles = showUploadedOnly
-    ? files.filter(file => file.name.includes('_')) // Uploaded files have UUID prefix
+    ? files.filter(file => file.type === 'text' || file.type === 'image' || file.type === 'archive') // Show user uploaded files
     : files; // Show all files (both uploaded and generated) in Generated Files section
 
   const displayTitle = showUploadedOnly ? 'Uploaded Files' : 'All Files';
