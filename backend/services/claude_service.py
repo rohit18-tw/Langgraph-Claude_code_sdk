@@ -24,7 +24,7 @@ class ClaudeService:
                 # Create new workflow with session continuity enabled
                 workflow = ClaudeCodeLangGraphWorkflow(
                     session_directory=session_dir,
-                    session_id=None  # New session - will enable continue_conversation
+                    session_id=session_id  # Pass actual session_id for proper isolation
                 )
                 ClaudeService._active_workflows[session_id] = workflow
             else:
@@ -163,7 +163,7 @@ class ClaudeService:
         """Stream Claude response through WebSocket"""
         try:
             session_dir = FileService.create_session_directory(session_id)
-            agent = ClaudeCodeAgent(session_directory=session_dir)
+            agent = ClaudeCodeAgent(session_directory=session_dir, session_id=session_id)
 
             # Create file context
             file_context = FileService.create_context_message(session_id)

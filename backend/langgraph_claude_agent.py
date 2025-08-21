@@ -32,10 +32,11 @@ class ClaudeCodeAgent:
             options = ClaudeCodeOptions(
                 permission_mode=self.permission_mode,
                 cwd=self.session_directory.resolve(),
-                # Enable session continuity
-                continue_conversation=True if not self.session_id else False,
-                # Resume specific session if provided
-                resume=self.session_id,
+                # Enable session continuity for new or continuing sessions
+                continue_conversation=True,
+                # Only resume if we have a session_id AND it's not a new session
+                # For new sessions, we want continue_conversation=True with no resume
+                resume=None,  # Let Claude CLI handle session creation automatically
                 # Enable more tools including web capabilities
                 allowed_tools=["Read", "Write", "Edit", "Bash", "LS", "Grep", "WebFetch", "WebSearch"],
                 max_turns=10
