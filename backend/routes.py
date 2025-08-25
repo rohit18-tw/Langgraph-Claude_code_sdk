@@ -1,11 +1,17 @@
 import json
 import logging
+import os
 from typing import List
 from fastapi import APIRouter, UploadFile, File, HTTPException, WebSocket, WebSocketDisconnect
+from pydantic import BaseModel
 
 from models import ChatMessage, ChatResponse, FileUploadResponse
 from services.file_service import FileService
 from services.claude_service import ClaudeService
+
+# MCP Configuration model
+class MCPConfig(BaseModel):
+    mcpServers: dict
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -103,3 +109,40 @@ async def clear_session(session_id: str):
     except Exception as e:
         logger.error(f"Error clearing session: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error clearing session: {str(e)}")
+
+@router.get("/mcp/config")
+async def get_mcp_config():
+    """Get current MCP configuration"""
+    try:
+        config_path = "mcp_config.json"
+        if os.path.exists(config_path):
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+            return config
+        else:
+            # Return default empty configuration
+            return {"mcpServers": {}}
+    except Exception as e:
+        logger.error(f"Error reading MCP config: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error reading MCP config: {str(e)}")
+
+@router.post("/mcp/config")
+async def update_mcp_config(config: MCPConfig):
+    """Update MCP configuration"""
+    try:
+        config_path = "mcp_config.json"
+
+        # Validate the configuration structure
+        if not hasattr(config, 'mcpServers') or not isinstance(config.mcpServers, dict):
+            raise HTTPException(status_code=400, detail="Invalid MCP configuration structure")
+
+        # Write the new configuration
+        with open(config_path, 'w') as f:
+            json.dump(config.dict(), f, indent=2)
+
+        logger.info("MCP configuration updated successfully")
+        return {"success": True, "message": "MCP configuration updated successfully"}
+
+    except Exception as e:
+        logger.error(f"Error updating MCP config: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error updating MCP config: {str(e)}")

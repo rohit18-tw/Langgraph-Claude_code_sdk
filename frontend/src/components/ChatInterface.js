@@ -5,13 +5,29 @@ import './ChatInterface.css';
 const ChatInterface = ({ messages, onSendMessage, onFileUpload, isLoading, isConnected, currentProgress, onStopGeneration, uploadedFiles }) => {
   const [inputMessage, setInputMessage] = useState('');
   const [showFileUpload, setShowFileUpload] = useState(false);
+  const [showUploadMenu, setShowUploadMenu] = useState(false);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
   const fileInputRef = useRef(null);
+  const folderInputRef = useRef(null);
+  const imageInputRef = useRef(null);
 
   useEffect(() => {
     scrollToBottom();
   }, [messages, currentProgress]);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showUploadMenu && !event.target.closest('.upload-container')) {
+        setShowUploadMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showUploadMenu]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -89,7 +105,7 @@ const ChatInterface = ({ messages, onSendMessage, onFileUpload, isLoading, isCon
   };
 
   const handleFileUploadClick = () => {
-    fileInputRef.current?.click();
+    setShowUploadMenu(!showUploadMenu);
   };
 
   const handleFileChange = async (e) => {
@@ -98,10 +114,26 @@ const ChatInterface = ({ messages, onSendMessage, onFileUpload, isLoading, isCon
       try {
         await onFileUpload(files);
         e.target.value = ''; // Reset file input
+        setShowUploadMenu(false);
       } catch (error) {
         console.error('File upload failed:', error);
       }
     }
+  };
+
+  const handleUploadFiles = () => {
+    fileInputRef.current?.click();
+    setShowUploadMenu(false);
+  };
+
+  const handleUploadImages = () => {
+    imageInputRef.current?.click();
+    setShowUploadMenu(false);
+  };
+
+  const handleUploadFolder = () => {
+    folderInputRef.current?.click();
+    setShowUploadMenu(false);
   };
 
   return (
@@ -185,24 +217,72 @@ const ChatInterface = ({ messages, onSendMessage, onFileUpload, isLoading, isCon
 
       <form className="message-input-form" onSubmit={handleSubmit}>
         <div className="input-container">
-          <button
-            type="button"
-            onClick={handleFileUploadClick}
-            className="file-upload-button"
-            title="Upload files"
-            disabled={isLoading}
-          >
-            +
-          </button>
+          <div className="upload-container">
+            <button
+              type="button"
+              onClick={handleFileUploadClick}
+              className="file-upload-button"
+              title="Upload files"
+              disabled={isLoading}
+            >
+              +
+            </button>
 
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            onChange={handleFileChange}
-            className="hidden-file-input"
-            accept=".txt,.md,.js,.jsx,.ts,.tsx,.py,.html,.css,.json,.xml,.yml,.yaml"
-          />
+            {/* Upload Menu */}
+            {showUploadMenu && (
+              <div className="upload-menu">
+                <button
+                  type="button"
+                  onClick={handleUploadFiles}
+                  className="upload-option"
+                >
+                  📄 Upload Files
+                </button>
+                <button
+                  type="button"
+                  onClick={handleUploadImages}
+                  className="upload-option"
+                >
+                  🖼️ Upload Images
+                </button>
+                <button
+                  type="button"
+                  onClick={handleUploadFolder}
+                  className="upload-option"
+                >
+                  📁 Upload Folder
+                </button>
+              </div>
+            )}
+
+            {/* Hidden File Inputs */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              onChange={handleFileChange}
+              className="hidden-file-input"
+              accept=".txt,.md,.js,.jsx,.ts,.tsx,.py,.html,.css,.json,.xml,.yml,.yaml"
+            />
+
+            <input
+              ref={imageInputRef}
+              type="file"
+              multiple
+              onChange={handleFileChange}
+              className="hidden-file-input"
+              accept=".png,.jpg,.jpeg,.gif,.bmp,.svg,.webp"
+            />
+
+            <input
+              ref={folderInputRef}
+              type="file"
+              multiple
+              webkitdirectory=""
+              onChange={handleFileChange}
+              className="hidden-file-input"
+            />
+          </div>
 
           <div className="input-wrapper">
             <textarea

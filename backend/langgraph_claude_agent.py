@@ -9,6 +9,9 @@ from langgraph.graph import StateGraph, END
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
 from claude_code_sdk import query, ClaudeCodeOptions, ClaudeSDKClient, Message
 import json
+import aiofiles
+from PIL import Image
+import httpx
 
 load_dotenv()
 
@@ -27,19 +30,50 @@ class ClaudeCodeAgent:
         self.client = None  # Will be initialized when needed
 
     async def _get_client(self) -> ClaudeSDKClient:
-        """Get or create Claude SDK client with session persistence"""
+        """Get or create Claude SDK client with enhanced capabilities"""
         if self.client is None:
+            # Load MCP configuration
+            mcp_config_path = self.session_directory.parent / "mcp_config.json"
+            mcp_servers = {}
+
+            if mcp_config_path.exists():
+                try:
+                    async with aiofiles.open(mcp_config_path, 'r') as f:
+                        mcp_config = json.loads(await f.read())
+                        mcp_servers = mcp_config.get("mcpServers", {})
+                        print(f"🔧 Loaded MCP config with {len(mcp_servers)} servers")
+                except Exception as e:
+                    print(f"⚠️ Failed to load MCP config: {e}")
+
+            # Enhanced tool set with web capabilities and MCP
+            allowed_tools = [
+                "Read", "Write", "Edit", "Bash", "LS", "Grep",
+                "WebFetch", "WebSearch",  # Web capabilities
+                "mcp__github",            # GitHub MCP server
+                "mcp__filesystem",        # Filesystem MCP server
+                "mcp__web"               # Web MCP server
+            ]
+
             options = ClaudeCodeOptions(
                 permission_mode=self.permission_mode,
-                cwd=self.session_directory.resolve(),
-                # Enable session continuity for new or continuing sessions
+                cwd=str(self.session_directory.resolve()),
+                # Enable session continuity only for valid existing sessions
                 continue_conversation=True,
-                # Only resume if we have a session_id AND it's not a new session
-                # For new sessions, we want continue_conversation=True with no resume
-                resume=None,  # Let Claude CLI handle session creation automatically
-                # Enable more tools including web capabilities
-                allowed_tools=["Read", "Write", "Edit", "Bash", "LS", "Grep", "WebFetch", "WebSearch"],
-                max_turns=10
+                # Only resume if we have a valid session ID and it's not a new random UUID
+                resume=None,  # Don't resume by default for new sessions
+                # Enhanced tool capabilities
+                allowed_tools=allowed_tools,
+                # MCP server configuration (pass as dictionary, not file path)
+                mcp_servers=mcp_servers,
+                # Increased turns for complex tasks
+                max_turns=15,
+                # Enhanced system prompt for web and image capabilities
+                append_system_prompt=(
+                    "You have access to web search, GitHub integration, and image processing capabilities. "
+                    "For images (screenshots, diagrams, charts), use the Read tool to analyze them. "
+                    "For GitHub operations, use the GitHub MCP tools. "
+                    "For web research, use WebSearch and WebFetch tools."
+                )
             )
             self.client = ClaudeSDKClient(options=options)
             await self.client.connect()
@@ -156,12 +190,15 @@ class ClaudeCodeAgent:
         return await self.execute_claude_code(prompt)
 
     def _format_tool_message(self, tool_name: str, tool_input: Dict[str, Any]) -> str:
-        """Simple tool message formatting - same as command line"""
+        """Enhanced tool message formatting with web and MCP support"""
         if tool_name == 'LS':
             path = tool_input.get('path', '')
             return f"📁 Listing: {path}"
         elif tool_name == 'Read':
             path = tool_input.get('file_path', '')
+            # Detect image files for special handling
+            if path and any(path.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.pdf']):
+                return f"🖼️ Reading image: {path}"
             return f"📖 Reading: {path}"
         elif tool_name == 'Write':
             path = tool_input.get('file_path', '') or tool_input.get('path', '')
@@ -172,14 +209,59 @@ class ClaudeCodeAgent:
         elif tool_name == 'Bash':
             command = tool_input.get('command', '')
             return f"⚡ Running: {command}"
+        elif tool_name == 'WebSearch':
+            query = tool_input.get('query', '')
+            return f"🔍 Web search: {query}"
+        elif tool_name == 'WebFetch':
+            url = tool_input.get('url', '')
+            return f"🌐 Fetching: {url}"
+        elif tool_name.startswith('mcp__github'):
+            action = tool_name.replace('mcp__github__', '').replace('mcp__github', 'GitHub')
+            return f"🐙 GitHub: {action}"
+        elif tool_name.startswith('mcp__filesystem'):
+            action = tool_name.replace('mcp__filesystem__', '').replace('mcp__filesystem', 'Filesystem')
+            return f"💾 Filesystem: {action}"
+        elif tool_name.startswith('mcp__web'):
+            action = tool_name.replace('mcp__web__', '').replace('mcp__web', 'Web')
+            return f"🌐 Web: {action}"
         elif tool_name == 'TodoWrite':
             return f"📝 Writing todo items"
         else:
-            return f" {tool_name}"
+            return f"🔧 {tool_name}"
+
+    async def process_image_file(self, image_path: Path) -> Dict[str, Any]:
+        """Process image file for enhanced context"""
+        try:
+            if not image_path.exists():
+                return {"error": f"Image file not found: {image_path}"}
+
+            # Basic image info using PIL
+            with Image.open(image_path) as img:
+                image_info = {
+                    "format": img.format,
+                    "mode": img.mode,
+                    "size": img.size,
+                    "width": img.width,
+                    "height": img.height
+                }
+
+            # File size
+            file_size = image_path.stat().st_size
+            image_info["file_size"] = file_size
+
+            return {
+                "success": True,
+                "image_info": image_info,
+                "message": f"📊 Image: {img.format} {img.width}x{img.height} ({file_size} bytes)"
+            }
+
+        except Exception as e:
+            return {"error": f"Failed to process image: {str(e)}"}
 
 class ClaudeCodeAgentNodes:
     def __init__(self, session_directory: Optional[Path] = None, session_id: Optional[str] = None):
-        self.claude_agent = ClaudeCodeAgent(session_directory=session_directory, session_id=session_id)
+        # Don't pass session_id for resumption to avoid "conversation not found" errors
+        self.claude_agent = ClaudeCodeAgent(session_directory=session_directory, session_id=None)
 
     async def claude_code_node(self, state: AgentState) -> AgentState:
         task = state.get("task", "")
@@ -219,7 +301,8 @@ class ClaudeCodeAgentNodes:
 
 class ClaudeCodeLangGraphWorkflow:
     def __init__(self, session_directory: Optional[Path] = None, session_id: Optional[str] = None):
-        self.agent_nodes = ClaudeCodeAgentNodes(session_directory=session_directory, session_id=session_id)
+        # Don't pass session_id for resumption to avoid "conversation not found" errors
+        self.agent_nodes = ClaudeCodeAgentNodes(session_directory=session_directory, session_id=None)
         self.workflow = self._build_workflow()
         self.session_id = session_id
 

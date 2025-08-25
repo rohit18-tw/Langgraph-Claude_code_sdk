@@ -5,6 +5,7 @@ import SessionSidebar from './components/SessionSidebar';
 import ChatInterface from './components/ChatInterface';
 import FileList from './components/FileList';
 import ConnectionStatus from './components/ConnectionStatus';
+import MCPManager from './components/MCPManager';
 import './App.css';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
@@ -16,6 +17,7 @@ function App() {
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [currentProgress, setCurrentProgress] = useState(null);
+  const [showMCPManager, setShowMCPManager] = useState(false);
   const websocketRef = useRef(null);
 
   useEffect(() => {
@@ -119,33 +121,43 @@ function App() {
     setIsLoading(true);
     setCurrentProgress('Processing your request...');
 
-    if (isConnected && websocketRef.current) {
-      websocketRef.current.send(JSON.stringify({
-        message: message,
-        session_id: sessionId
-      }));
+    if (isConnected && websocketRef.current && websocketRef.current.readyState === WebSocket.OPEN) {
+      try {
+        websocketRef.current.send(JSON.stringify({
+          message: message,
+          session_id: sessionId
+        }));
+      } catch (error) {
+        console.error('WebSocket send error:', error);
+        // Fallback to HTTP API if WebSocket fails
+        await sendMessageViaHTTP(message);
+      }
     } else {
       // Fallback to HTTP API
-      try {
-        const response = await axios.post(`${API_BASE_URL}/chat`, {
-          message: message,
-          session_id: sessionId,
-          uploaded_files: uploadedFiles.map(f => f.path)
-        });
+      await sendMessageViaHTTP(message);
+    }
+  };
 
-        if (response.data.success) {
-          addMessage('assistant', response.data.message, {
-            metadata: response.data.metadata
-          });
-        } else {
-          addMessage('error', response.data.message);
-        }
-      } catch (error) {
-        addMessage('error', `Failed to send message: ${error.message}`);
-      } finally {
-        setIsLoading(false);
-        setCurrentProgress(null);
+  const sendMessageViaHTTP = async (message) => {
+    try {
+      const response = await axios.post(`${API_BASE_URL}/chat`, {
+        message: message,
+        session_id: sessionId,
+        uploaded_files: uploadedFiles.map(f => f.path)
+      });
+
+      if (response.data.success) {
+        addMessage('assistant', response.data.message, {
+          metadata: response.data.metadata
+        });
+      } else {
+        addMessage('error', response.data.message);
       }
+    } catch (error) {
+      addMessage('error', `Failed to send message: ${error.message}`);
+    } finally {
+      setIsLoading(false);
+      setCurrentProgress(null);
     }
   };
 
@@ -272,6 +284,10 @@ function App() {
     }
   };
 
+  const handleMCPConfigUpdate = (config) => {
+    addMessage('system', 'MCP configuration updated successfully. The backend will use the new configuration for future requests.');
+  };
+
   return (
     <div className="App">
       <main className="App-main">
@@ -285,7 +301,16 @@ function App() {
         <div className="chat-container">
           <div className="chat-header">
             <h1>FStratum</h1>
-            <ConnectionStatus isConnected={isConnected} sessionId={sessionId} />
+            <div className="header-actions">
+              <button
+                onClick={() => setShowMCPManager(true)}
+                className="mcp-config-button"
+                title="Manage MCP Configuration"
+              >
+                ⚙️ MCP Config
+              </button>
+              <ConnectionStatus isConnected={isConnected} sessionId={sessionId} />
+            </div>
           </div>
 
           <ChatInterface
@@ -309,6 +334,13 @@ function App() {
           />
         </div>
       </main>
+
+      {/* MCP Configuration Manager Modal */}
+      <MCPManager
+        isOpen={showMCPManager}
+        onClose={() => setShowMCPManager(false)}
+        onConfigUpdate={handleMCPConfigUpdate}
+      />
     </div>
   );
 }

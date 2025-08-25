@@ -4,6 +4,15 @@ python-multipart==0.0.6
 websockets==12.0
 python-dotenv==1.0.0
 
+# LangGraph and Claude Code SDK
 langgraph
 langchain-core
-claude-code-sdk      # Will then install latest, which needs anyio>=4.0.0
+claude-code-sdk      # Claude Code SDK with MCP support
+
+# Image processing and vision support
+Pillow>=10.0.0       # Image processing for screenshots, diagrams, charts
+aiofiles>=23.1.0     # Async file operations for image handling
+
+# Additional utilities for web capabilities
+httpx>=0.25.0        # HTTP client for web requests
+beautifulsoup4>=4.12.0  # HTML parsing for web content
