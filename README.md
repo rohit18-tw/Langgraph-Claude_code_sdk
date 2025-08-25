@@ -73,17 +73,35 @@ pip install -r requirements.txt
 ```
 
 #### Configure Environment Variables
-Create a `.env` file in the `backend/` directory:
+Copy the example environment file and configure it:
+```bash
+cp backend/.env.example backend/.env
+```
+
+Edit `backend/.env` and replace `your_anthropic_api_key_here` with your actual Anthropic API key:
 ```bash
 # Required: Your Anthropic API key
-ANTHROPIC_API_KEY=your_anthropic_api_key_here
+ANTHROPIC_API_KEY=sk-ant-api03-your_actual_api_key_here
 
-# Optional: Server configuration
+# Optional: Server configuration (defaults shown)
 HOST=0.0.0.0
 PORT=8000
 DEBUG=true
 LOG_LEVEL=INFO
+
+# Optional: Redis configuration (only if using Redis features)
+REDIS_URL=redis://localhost:6379
+SESSION_TTL_HOURS=24
 ```
+
+**⚠️ Important**: Never commit your actual `.env` file to version control. The `.gitignore` file is configured to exclude `.env` files.
+
+### Environment File Security
+- The repository includes `.env.example` files showing the required structure
+- Copy these to `.env` files in their respective directories
+- Never commit `.env` files containing real API keys or sensitive data
+- The `.gitignore` file is pre-configured to exclude all `.env` files
+- Rotate API keys regularly for security
 
 ### 3. Frontend Setup
 
@@ -94,11 +112,22 @@ npm install
 ```
 
 #### Configure Frontend Environment
-Create a `.env` file in the `frontend/` directory:
+Copy the example environment file and configure it:
 ```bash
-# Backend API URL (adjust if backend runs on different host/port)
-REACT_APP_API_URL=http://localhost:8000
+cp frontend/.env.example frontend/.env
 ```
+
+For local development, the default values in `frontend/.env` should work:
+```bash
+# Backend API URLs (for local development)
+REACT_APP_API_URL=http://localhost:8000
+REACT_APP_WS_URL=ws://localhost:8000
+
+# Development Settings
+GENERATE_SOURCEMAP=false
+```
+
+**Note**: If you're using ngrok or deploying to a different host, update these URLs accordingly.
 
 **Note**: The frontend `package.json` includes a proxy configuration that routes API calls to the backend server.
 
