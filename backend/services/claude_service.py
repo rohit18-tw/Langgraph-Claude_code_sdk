@@ -98,17 +98,17 @@ class ClaudeService:
     async def process_tool_use_message(websocket: WebSocket, tool_name: str, tool_input: Dict[str, Any]):
         """Process and send tool use messages"""
         tool_messages = {
-            'write_to_file': lambda: f"🔨 Generating {Path(tool_input.get('path', 'file')).name}",
-            'replace_in_file': lambda: f"✏️ Updating {Path(tool_input.get('path', 'file')).name}",
-            'read_file': lambda: f"📖 Reading {Path(tool_input.get('path', 'file')).name}",
-            'list_files': lambda: f"📁 Listing {Path(tool_input.get('path', '.')).name or 'current directory'}",
-            'execute_command': lambda: f"⚡ Running: {tool_input.get('command', '')[:50]}{'...' if len(tool_input.get('command', '')) > 50 else ''}",
-            'Write': lambda: f"🔨 Generating {Path(tool_input.get('file_path', '') or tool_input.get('path', 'file')).name}",
-            'Edit': lambda: f"✏️ Updating {Path(tool_input.get('file_path', '') or tool_input.get('path', 'file')).name}",
-            'Read': lambda: f"📖 Reading {Path(tool_input.get('file_path', '') or tool_input.get('path', 'file')).name}",
-            'LS': lambda: f"📁 Listing {Path(tool_input.get('path', '.')).name or 'current directory'}",
-            'Bash': lambda: f"⚡ Running: {tool_input.get('command', '')[:50]}{'...' if len(tool_input.get('command', '')) > 50 else ''}",
-            'TodoWrite': lambda: "📝 Updating project plan"
+            'write_to_file': lambda: f"Generating {Path(tool_input.get('path', 'file')).name}",
+            'replace_in_file': lambda: f"Updating {Path(tool_input.get('path', 'file')).name}",
+            'read_file': lambda: f"Reading {Path(tool_input.get('path', 'file')).name}",
+            'list_files': lambda: f"Listing {Path(tool_input.get('path', '.')).name or 'current directory'}",
+            'execute_command': lambda: f"Running: {tool_input.get('command', '')[:50]}{'...' if len(tool_input.get('command', '')) > 50 else ''}",
+            'Write': lambda: f"Generating {Path(tool_input.get('file_path', '') or tool_input.get('path', 'file')).name}",
+            'Edit': lambda: f"Updating {Path(tool_input.get('file_path', '') or tool_input.get('path', 'file')).name}",
+            'Read': lambda: f"Reading {Path(tool_input.get('file_path', '') or tool_input.get('path', 'file')).name}",
+            'LS': lambda: f"Listing {Path(tool_input.get('path', '.')).name or 'current directory'}",
+            'Bash': lambda: f"Running: {tool_input.get('command', '')[:50]}{'...' if len(tool_input.get('command', '')) > 50 else ''}",
+            'TodoWrite': lambda: "Updating project plan"
         }
 
         if tool_name in tool_messages:
@@ -160,7 +160,7 @@ class ClaudeService:
 
     @staticmethod
     async def stream_claude_response(websocket: WebSocket, session_id: str, message: str):
-        """Stream Claude response through WebSocket"""
+        """Stream Claude response through WebSocket with enhanced verbose support"""
         try:
             session_dir = FileService.create_session_directory(session_id)
             agent = ClaudeCodeAgent(session_directory=session_dir, session_id=session_id)
@@ -182,18 +182,79 @@ class ClaudeService:
             )
 
             try:
+                message_count = 0
                 async for stream_data in agent.execute_claude_code_streaming(full_prompt):
-                    if stream_data.get('type') == 'tool_use':
-                        await ClaudeService.process_tool_use_message(
-                            websocket,
-                            stream_data.get('tool_name', ''),
-                            stream_data.get('tool_input', {})
-                        )
+                    message_count += 1
+                    message_type = stream_data.get('type', 'unknown')
 
-                    await websocket.send_text(json.dumps({
-                        **stream_data,
-                        "timestamp": datetime.now().isoformat()
-                    }))
+                    # Handle verbose messages for detailed progress tracking
+                    if message_type == 'verbose':
+                        subtype = stream_data.get('subtype', '')
+                        verbose_message = stream_data.get('message', '')
+
+                        # Send specific progress messages to update the frontend
+                        if subtype == 'init':
+                            await ClaudeService.send_websocket_message(
+                                websocket, "progress", verbose_message
+                            )
+                        elif subtype == 'user_input':
+                            await ClaudeService.send_websocket_message(
+                                websocket, "progress", verbose_message
+                            )
+                        elif subtype == 'tool_start':
+                            await ClaudeService.send_websocket_message(
+                                websocket, "progress", verbose_message
+                            )
+                        else:
+                            # Send all other verbose messages as progress
+                            await ClaudeService.send_websocket_message(
+                                websocket, "progress", verbose_message
+                            )
+
+                    # Handle text content from Claude's responses
+                    elif message_type == 'text':
+                        await websocket.send_text(json.dumps({
+                            "type": "text",
+                            "content": stream_data.get('content', ''),
+                            "timestamp": datetime.now().isoformat()
+                        }))
+
+                    # Handle success messages
+                    elif message_type == 'success':
+                        await websocket.send_text(json.dumps({
+                            "type": "success",
+                            "result": stream_data.get('result', ''),
+                            "metadata": stream_data.get('metadata', {}),
+                            "timestamp": datetime.now().isoformat()
+                        }))
+                        break
+
+                    # Handle error messages
+                    elif message_type == 'error':
+                        await websocket.send_text(json.dumps({
+                            "type": "error",
+                            "message": stream_data.get('message', ''),
+                            "error": stream_data.get('error', ''),
+                            "timestamp": datetime.now().isoformat()
+                        }))
+                        break
+
+                    # Handle raw messages for debugging (don't send to frontend to avoid clutter)
+                    elif message_type == 'raw':
+                        # Log raw messages for debugging but don't send to frontend
+                        print(f"Debug: Raw message {message_count}: {stream_data}")
+                        continue
+
+                    # Handle any other message types
+                    else:
+                        # Send unknown message types directly to frontend
+                        await websocket.send_text(json.dumps({
+                            **stream_data,
+                            "timestamp": datetime.now().isoformat()
+                        }))
+
+                print(f"Streaming completed: {message_count} messages processed")
+
             finally:
                 monitor_task.cancel()
                 try:

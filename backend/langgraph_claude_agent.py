@@ -41,9 +41,9 @@ class ClaudeCodeAgent:
                     async with aiofiles.open(mcp_config_path, 'r') as f:
                         mcp_config = json.loads(await f.read())
                         mcp_servers = mcp_config.get("mcpServers", {})
-                        print(f"🔧 Loaded MCP config with {len(mcp_servers)} servers")
+                        print(f"Loaded MCP config with {len(mcp_servers)} servers")
                 except Exception as e:
-                    print(f"⚠️ Failed to load MCP config: {e}")
+                    print(f"Failed to load MCP config: {e}")
 
             # Enhanced tool set with web capabilities and MCP
             allowed_tools = [
@@ -67,6 +67,11 @@ class ClaudeCodeAgent:
                 mcp_servers=mcp_servers,
                 # Increased turns for complex tasks
                 max_turns=15,
+                # Enable verbose output and streaming JSON format using extra_args
+                extra_args={
+                    "verbose": None,  # CLI flag without value
+                    "output-format": "stream-json"  # CLI flag with value
+                },
                 # Enhanced system prompt for web and image capabilities
                 append_system_prompt=(
                     "You have access to web search, GitHub integration, and image processing capabilities. "
@@ -126,50 +131,193 @@ class ClaudeCodeAgent:
         return result_data
 
     async def execute_claude_code_streaming(self, prompt: str) -> AsyncGenerator[Dict[str, Any], None]:
-        """Stream Claude Code execution with built-in session persistence"""
+        """Stream Claude Code execution using direct CLI for proper verbose output"""
+        import json
+        import asyncio
+        import os
+
+        # Set API key from environment
+        env = os.environ.copy()
+        if 'ANTHROPIC_API_KEY' not in env:
+            # Try to load from backend .env file
+            env_path = Path(__file__).parent / '.env'
+            if env_path.exists():
+                with open(env_path) as f:
+                    for line in f:
+                        if line.strip() and not line.startswith('#'):
+                            key, value = line.strip().split('=', 1)
+                            env[key] = value.strip('"\'')
+
         try:
-            client = await self._get_client()
+            # Prepare the command with proper verbose and stream-json flags
+            cmd = [
+                "claude", "-p", prompt,
+                "--verbose",
+                "--output-format", "stream-json",
+                "--permission-mode", self.permission_mode,
+                "--max-turns", "15"
+            ]
 
-            # Send query with automatic session management
-            await client.query(prompt)
+            # Add allowed tools
+            allowed_tools = [
+                "Read", "Write", "Edit", "Bash", "LS", "Grep",
+                "WebFetch", "WebSearch",
+                "mcp__github", "mcp__filesystem", "mcp__web"
+            ]
+            cmd.extend(["--allowedTools", ",".join(allowed_tools)])
 
-            # Stream responses with full metadata
-            async for message in client.receive_response():
-                message_type = type(message).__name__
+            # Add MCP config if it exists
+            mcp_config_path = self.session_directory.parent / "mcp_config.json"
+            if mcp_config_path.exists():
+                cmd.extend(["--mcp-config", str(mcp_config_path)])
 
-                # Tool usage detection
-                if hasattr(message, 'content'):
-                    for block in message.content:
-                        if hasattr(block, 'type') and block.type == 'tool_use':
+            print(f"Executing: {' '.join(cmd)}")
+
+            # Start the subprocess with proper environment
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                env=env,
+                cwd=str(self.session_directory.resolve())
+            )
+
+            message_count = 0
+
+            # Read stdout line by line and process JSON messages
+            async def read_stdout():
+                nonlocal message_count
+                while True:
+                    line = await process.stdout.readline()
+                    if not line:
+                        break
+
+                    line_text = line.decode().strip()
+                    if not line_text:
+                        continue
+
+                    message_count += 1
+                    print(f"Raw message {message_count}: {line_text[:100]}...")
+
+                    try:
+                        # Parse JSON message
+                        data = json.loads(line_text)
+                        msg_type = data.get('type', '')
+
+                        # System initialization message
+                        if msg_type == 'system' and data.get('subtype') == 'init':
+                            model = data.get('model', 'claude')
+                            tools = data.get('tools', [])
                             yield {
-                                "type": "tool_use",
-                                "tool_name": block.name,
-                                "tool_input": block.input
-                            }
-                        elif hasattr(block, 'text'):
-                            yield {
-                                "type": "text",
-                                "content": block.text
+                                "type": "verbose",
+                                "subtype": "init",
+                                "message": f"Session initialized - Model: {model}, Tools: {len(tools)}",
+                                "raw_data": data
                             }
 
-                # Final result with session metadata
-                if message_type == "ResultMessage":
-                    yield {
-                        "type": "success",
-                        "result": getattr(message, 'result', None),
-                        "metadata": {
-                            "total_cost_usd": getattr(message, 'total_cost_usd', 0),
-                            "duration_ms": getattr(message, 'duration_ms', 0),
-                            "num_turns": getattr(message, 'num_turns', 0),
-                            "session_id": getattr(message, 'session_id', None)
+                        # User input message
+                        elif msg_type == 'user':
+                            yield {
+                                "type": "verbose",
+                                "subtype": "user_input",
+                                "message": "Processing your request...",
+                                "raw_data": data
+                            }
+
+                        # Assistant response message
+                        elif msg_type == 'assistant':
+                            message_obj = data.get('message', {})
+                            content = message_obj.get('content', [])
+
+                            # Process each content block
+                            for block in content:
+                                if block.get('type') == 'tool_use':
+                                    tool_name = block.get('name', 'unknown')
+                                    tool_input = block.get('input', {})
+
+                                    # Yield tool usage message
+                                    formatted_msg = self._format_tool_message(tool_name, tool_input)
+                                    yield {
+                                        "type": "verbose",
+                                        "subtype": "tool_start",
+                                        "message": formatted_msg,
+                                        "tool_name": tool_name,
+                                        "tool_input": tool_input
+                                    }
+
+                                elif block.get('type') == 'text' and block.get('text', '').strip():
+                                    # Yield text content
+                                    yield {
+                                        "type": "text",
+                                        "content": block['text'].strip(),
+                                        "raw_data": data
+                                    }
+
+                        # Final result message
+                        elif msg_type == 'result':
+                            result = data.get('result', 'Task completed')
+                            is_error = data.get('is_error', False)
+
+                            if is_error:
+                                yield {
+                                    "type": "error",
+                                    "message": result,
+                                    "error": result,
+                                    "raw_data": data
+                                }
+                            else:
+                                yield {
+                                    "type": "success",
+                                    "result": result,
+                                    "metadata": {
+                                        "total_cost_usd": data.get('total_cost_usd', 0),
+                                        "duration_ms": data.get('duration_ms', 0),
+                                        "num_turns": data.get('num_turns', 0),
+                                        "session_id": data.get('session_id', None)
+                                    },
+                                    "raw_data": data
+                                }
+                            break
+
+                        # Forward all raw messages for debugging
+                        yield {
+                            "type": "raw",
+                            "data": data
                         }
+
+                    except json.JSONDecodeError as e:
+                        # Handle non-JSON lines (verbose output)
+                        yield {
+                            "type": "verbose",
+                            "subtype": "output",
+                            "message": line_text,
+                            "error": f"JSON parse error: {e}"
+                        }
+
+            # Process messages from stdout
+            async for message in read_stdout():
+                yield message
+
+            # Wait for process completion
+            return_code = await process.wait()
+
+            # Handle stderr if there are errors
+            if return_code != 0:
+                stderr_output = await process.stderr.read()
+                if stderr_output:
+                    yield {
+                        "type": "error",
+                        "message": f"Process failed with code {return_code}",
+                        "error": stderr_output.decode().strip()
                     }
-                    break
+
+            print(f"Process completed with {message_count} messages, return code: {return_code}")
 
         except Exception as e:
+            print(f"Exception in streaming: {e}")
             yield {
                 "type": "error",
-                "message": f"❌ Execution error: {str(e)}",
+                "message": f"CLI execution error: {str(e)}",
                 "error": str(e)
             }
 
@@ -193,41 +341,41 @@ class ClaudeCodeAgent:
         """Enhanced tool message formatting with web and MCP support"""
         if tool_name == 'LS':
             path = tool_input.get('path', '')
-            return f"📁 Listing: {path}"
+            return f"Listing: {path}"
         elif tool_name == 'Read':
             path = tool_input.get('file_path', '')
             # Detect image files for special handling
             if path and any(path.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.pdf']):
-                return f"🖼️ Reading image: {path}"
-            return f"📖 Reading: {path}"
+                return f"Reading image: {path}"
+            return f"Reading: {path}"
         elif tool_name == 'Write':
             path = tool_input.get('file_path', '') or tool_input.get('path', '')
-            return f"📝 Writing: {path}"
+            return f"Writing: {path}"
         elif tool_name == 'Edit':
             path = tool_input.get('file_path', '') or tool_input.get('path', '')
-            return f"✏️ Editing: {path}"
+            return f"Editing: {path}"
         elif tool_name == 'Bash':
             command = tool_input.get('command', '')
-            return f"⚡ Running: {command}"
+            return f"Running: {command}"
         elif tool_name == 'WebSearch':
             query = tool_input.get('query', '')
-            return f"🔍 Web search: {query}"
+            return f"Web search: {query}"
         elif tool_name == 'WebFetch':
             url = tool_input.get('url', '')
-            return f"🌐 Fetching: {url}"
+            return f"Fetching: {url}"
         elif tool_name.startswith('mcp__github'):
             action = tool_name.replace('mcp__github__', '').replace('mcp__github', 'GitHub')
-            return f"🐙 GitHub: {action}"
+            return f"GitHub: {action}"
         elif tool_name.startswith('mcp__filesystem'):
             action = tool_name.replace('mcp__filesystem__', '').replace('mcp__filesystem', 'Filesystem')
-            return f"💾 Filesystem: {action}"
+            return f"Filesystem: {action}"
         elif tool_name.startswith('mcp__web'):
             action = tool_name.replace('mcp__web__', '').replace('mcp__web', 'Web')
-            return f"🌐 Web: {action}"
+            return f"Web: {action}"
         elif tool_name == 'TodoWrite':
-            return f"📝 Writing todo items"
+            return f"Writing todo items"
         else:
-            return f"🔧 {tool_name}"
+            return f"Tool: {tool_name}"
 
     async def process_image_file(self, image_path: Path) -> Dict[str, Any]:
         """Process image file for enhanced context"""
@@ -252,7 +400,7 @@ class ClaudeCodeAgent:
             return {
                 "success": True,
                 "image_info": image_info,
-                "message": f"📊 Image: {img.format} {img.width}x{img.height} ({file_size} bytes)"
+                "message": f"Image: {img.format} {img.width}x{img.height} ({file_size} bytes)"
             }
 
         except Exception as e:
@@ -271,7 +419,7 @@ class ClaudeCodeAgentNodes:
                 "error": "No task provided",
             }
 
-        print(f"🤖 Executing: {task}")
+        print(f"Executing: {task}")
 
         try:
             result_data = await self.claude_agent.execute_claude_code(task)
@@ -364,7 +512,7 @@ def get_user_prompt() -> str:
 
     if args.interactive or len(sys.argv) == 1:
         try:
-            prompt = input("📝 Enter task: ").strip()
+            prompt = input("Enter task: ").strip()
             if prompt.lower() in ['quit', 'exit', 'q']:
                 sys.exit(0)
             return prompt
@@ -380,18 +528,18 @@ async def run_single_task(prompt: str, permission_mode: str = "acceptEdits"):
     workflow.agent_nodes.claude_agent.permission_mode = permission_mode
 
     try:
-        print(f"🤖 Executing: {prompt}")
+        print(f"Executing: {prompt}")
         print("=" * 80)
 
         # Use streaming method for command line to show real-time progress
         async for stream_data in workflow.agent_nodes.claude_agent.execute_claude_code_streaming(prompt):
             if stream_data.get('type') == 'status':
-                print(f"📌 {stream_data['message']}")
+                print(f"Status: {stream_data['message']}")
                 if stream_data.get('details'):
                     print(f"   {stream_data['details']}")
 
             elif stream_data.get('type') == 'init':
-                print(f"🔧 {stream_data['message']}")
+                print(f"Init: {stream_data['message']}")
                 if stream_data.get('details'):
                     print(f"   {stream_data['details']}")
 
@@ -402,26 +550,26 @@ async def run_single_task(prompt: str, permission_mode: str = "acceptEdits"):
                 # Show simple, clean tool usage
                 if tool_name == 'LS':
                     path = tool_input.get('path', '')
-                    print(f"📁 Listing: {path}")
+                    print(f"Listing: {path}")
                 elif tool_name == 'Read':
                     path = tool_input.get('file_path', '')
-                    print(f"📖 Reading: {path}")
+                    print(f"Reading: {path}")
                 elif tool_name == 'Write':
                     path = tool_input.get('file_path', '') or tool_input.get('path', '')
-                    print(f"📝 Writing: {path}")
+                    print(f"Writing: {path}")
                 elif tool_name == 'Edit':
                     path = tool_input.get('file_path', '') or tool_input.get('path', '')
-                    print(f"✏️ Editing: {path}")
+                    print(f"Editing: {path}")
                 elif tool_name == 'Bash':
                     command = tool_input.get('command', '')
-                    print(f"⚡ Running: {command}")
+                    print(f"Running: {command}")
                 elif tool_name == 'TodoWrite':
-                    print(f"📝 Writing todo items")
+                    print(f"Writing todo items")
                 else:
-                    print(f"🔧 {tool_name}")
+                    print(f"{tool_name}")
 
             elif stream_data.get('type') == 'thinking':
-                print(f"💭 {stream_data['message']}")
+                print(f"{stream_data['message']}")
                 if stream_data.get('details'):
                     # Show truncated thinking details
                     details = stream_data['details']
@@ -430,7 +578,7 @@ async def run_single_task(prompt: str, permission_mode: str = "acceptEdits"):
                     print(f"   {details}")
 
             elif stream_data.get('type') == 'tool_result':
-                print(f"📋 {stream_data['message']}")
+                print(f"{stream_data['message']}")
                 if stream_data.get('details'):
                     # Show truncated tool result
                     details = stream_data['details']
@@ -440,7 +588,7 @@ async def run_single_task(prompt: str, permission_mode: str = "acceptEdits"):
 
             elif stream_data.get('type') == 'success':
                 print("\n" + "=" * 80)
-                print("✅ Task Completed Successfully!")
+                print("Task Completed Successfully!")
                 print("=" * 80)
 
                 if stream_data.get('result'):
@@ -448,7 +596,7 @@ async def run_single_task(prompt: str, permission_mode: str = "acceptEdits"):
 
                 if stream_data.get('metadata'):
                     metadata = stream_data['metadata']
-                    print(f"\n📊 Execution Summary:")
+                    print(f"\nExecution Summary:")
                     print(f"   Duration: {metadata.get('duration_ms', 0)}ms")
                     print(f"   Turns: {metadata.get('num_turns', 0)}")
                     print(f"   Cost: ${metadata.get('total_cost_usd', 0):.4f}")
@@ -458,13 +606,13 @@ async def run_single_task(prompt: str, permission_mode: str = "acceptEdits"):
 
             elif stream_data.get('type') == 'error':
                 print("\n" + "=" * 80)
-                print("❌ Task Failed!")
+                print("Task Failed!")
                 print("=" * 80)
                 print(f"Error: {stream_data.get('message', 'Unknown error')}")
                 break
 
     except Exception as e:
-        print(f"❌ Error: {str(e)}")
+        print(f"Error: {str(e)}")
 
 async def main():
     parser = argparse.ArgumentParser(add_help=False)
@@ -474,7 +622,7 @@ async def main():
     try:
         prompt = get_user_prompt()
         if not prompt:
-            print("❌ No prompt provided!")
+            print("No prompt provided!")
             return
 
         await run_single_task(prompt, args.permission_mode)
@@ -482,7 +630,7 @@ async def main():
     except KeyboardInterrupt:
         print("\nBye!")
     except Exception as e:
-        print(f"❌ Error: {str(e)}")
+        print(f"Error: {str(e)}")
 
 if __name__ == "__main__":
     asyncio.run(main())

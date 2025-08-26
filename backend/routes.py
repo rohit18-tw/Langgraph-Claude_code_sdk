@@ -65,10 +65,10 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
             if not user_message:
                 continue
 
-            # Send acknowledgment
-            await ClaudeService.send_websocket_message(
-                websocket, "status", "Processing your request..."
-            )
+            # Don't send generic acknowledgment, let Claude's verbose messages show instead
+            # await ClaudeService.send_websocket_message(
+            #     websocket, "status", "Processing your request..."
+            # )
 
             # Stream Claude response
             await ClaudeService.stream_claude_response(websocket, session_id, user_message)
