@@ -5,6 +5,7 @@ class ChatMessage(BaseModel):
     message: str
     session_id: str
     uploaded_files: Optional[List[str]] = []
+    images: Optional[List[Dict[str, Any]]] = []
 
 class ChatResponse(BaseModel):
     success: bool

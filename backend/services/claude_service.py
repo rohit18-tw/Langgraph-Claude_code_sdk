@@ -1,5 +1,6 @@
 import json
 import asyncio
+import base64
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any
@@ -14,10 +15,16 @@ class ClaudeService:
     _active_workflows: Dict[str, ClaudeCodeLangGraphWorkflow] = {}
 
     @staticmethod
-    async def process_chat_message(session_id: str, message: str) -> Dict[str, Any]:
+    async def process_chat_message(session_id: str, message: str, images: list = None) -> Dict[str, Any]:
         """Process chat message using Claude agent with built-in session persistence"""
         try:
             session_dir = FileService.create_session_directory(session_id)
+
+            # Process images if provided
+            full_message = message
+            if images and len(images) > 0:
+                image_context = ClaudeService._process_image_data(images, session_id)
+                full_message = f"{message}\n\n{image_context}" if message else image_context
 
             # Get or create workflow with session management
             if session_id not in ClaudeService._active_workflows:
@@ -33,7 +40,7 @@ class ClaudeService:
 
             # Use built-in session management - no manual context needed
             # The SDK automatically handles memory and session persistence
-            result = await workflow.continue_conversation(message)
+            result = await workflow.continue_conversation(full_message)
 
             return {
                 "success": result.get("error") is None,
@@ -159,7 +166,7 @@ class ClaudeService:
             print(f"Error sending file updates: {str(e)}")
 
     @staticmethod
-    async def stream_claude_response(websocket: WebSocket, session_id: str, message: str):
+    async def stream_claude_response(websocket: WebSocket, session_id: str, message: str, images: list = None):
         """Stream Claude response through WebSocket with enhanced verbose support"""
         try:
             session_dir = FileService.create_session_directory(session_id)
@@ -167,7 +174,14 @@ class ClaudeService:
 
             # Create file context
             file_context = FileService.create_context_message(session_id)
-            full_prompt = f"{file_context}\n\n## User Request:\n{message}" if file_context else message
+
+            # Process images if provided
+            user_message = message
+            if images and len(images) > 0:
+                image_context = ClaudeService._process_image_data(images, session_id)
+                user_message = f"{message}\n\n{image_context}" if message else image_context
+
+            full_prompt = f"{file_context}\n\n## User Request:\n{user_message}" if file_context else user_message
 
             # Get initial file snapshot
             initial_files = set()
@@ -239,10 +253,44 @@ class ClaudeService:
                         }))
                         break
 
+                    # Handle fallback required (for complex processing)
+                    elif message_type == 'fallback_required':
+                        await ClaudeService.send_websocket_message(
+                            websocket,
+                            "progress",
+                            "Processing your request..."
+                        )
+
+                        try:
+                            # Use Claude's HTTP API instead of streaming for complex processing
+                            result = await ClaudeService.process_chat_message(session_id, message, images)
+
+                            if result.get("success"):
+                                await websocket.send_text(json.dumps({
+                                    "type": "success",
+                                    "result": result.get("message", ""),
+                                    "metadata": result.get("metadata", {}),
+                                    "timestamp": datetime.now().isoformat()
+                                }))
+                            else:
+                                await websocket.send_text(json.dumps({
+                                    "type": "error",
+                                    "message": result.get("message", "Failed to process request"),
+                                    "timestamp": datetime.now().isoformat()
+                                }))
+                        except Exception as fallback_error:
+                            await websocket.send_text(json.dumps({
+                                "type": "error",
+                                "message": f"Unable to process request: {str(fallback_error)}",
+                                "timestamp": datetime.now().isoformat()
+                            }))
+                        break
+
                     # Handle raw messages for debugging (don't send to frontend to avoid clutter)
                     elif message_type == 'raw':
-                        # Log raw messages for debugging but don't send to frontend
-                        print(f"Debug: Raw message {message_count}: {stream_data}")
+                        # Reduced debug output - only log errors or every 20th message
+                        if message_count % 20 == 0:
+                            print(f"Processing {message_count} messages...")
                         continue
 
                     # Handle any other message types
@@ -266,8 +314,93 @@ class ClaudeService:
             await ClaudeService.send_file_list_update(websocket, session_id)
 
         except Exception as e:
-            await ClaudeService.send_websocket_message(
-                websocket,
-                "error",
-                f"Error processing request: {str(e)}"
-            )
+            error_msg = str(e)
+
+            # Handle streaming buffer issues by falling back to HTTP API
+            if "separator" in error_msg.lower() and "chunk" in error_msg.lower():
+                await ClaudeService.send_websocket_message(
+                    websocket,
+                    "progress",
+                    "Processing your request..."
+                )
+
+                try:
+                    # Fall back to HTTP API for complex processing
+                    result = await ClaudeService.process_chat_message(session_id, message, images)
+
+                    if result.get("success"):
+                        await websocket.send_text(json.dumps({
+                            "type": "success",
+                            "result": result.get("message", ""),
+                            "metadata": result.get("metadata", {}),
+                            "timestamp": datetime.now().isoformat()
+                        }))
+                    else:
+                        await ClaudeService.send_websocket_message(
+                            websocket,
+                            "error",
+                            result.get("message", "Failed to process request")
+                        )
+                except Exception as fallback_error:
+                    await ClaudeService.send_websocket_message(
+                        websocket,
+                        "error",
+                        f"Unable to process request: {str(fallback_error)}"
+                    )
+            else:
+                await ClaudeService.send_websocket_message(
+                    websocket,
+                    "error",
+                    f"Error processing request: {error_msg}"
+                )
+
+    @staticmethod
+    def _process_image_data(images: list, session_id: str) -> str:
+        """Process image data and save as files for Claude to analyze"""
+        if not images:
+            return ""
+
+        session_dir = FileService.create_session_directory(session_id)
+        image_files = []
+
+        for i, image in enumerate(images):
+            try:
+                name = image.get('name', f'image_{i+1}')
+                data_url = image.get('dataUrl', '')
+
+                if data_url.startswith('data:'):
+                    # Extract image type and base64 data
+                    header, base64_data = data_url.split(',', 1)
+
+                    # Get image format from data URL
+                    image_format = 'png'  # default
+                    if 'image/' in header:
+                        image_format = header.split('image/')[1].split(';')[0]
+
+                    # Create safe filename
+                    safe_name = name.replace(' ', '_').replace('/', '_')
+                    if not safe_name.lower().endswith(f'.{image_format}'):
+                        safe_name = f"{safe_name.split('.')[0]}.{image_format}"
+
+                    # Save image to session directory
+                    image_path = session_dir / safe_name
+
+                    # Decode and save the image
+                    image_bytes = base64.b64decode(base64_data)
+                    with open(image_path, 'wb') as f:
+                        f.write(image_bytes)
+
+                    image_files.append(safe_name)
+
+            except Exception as e:
+                print(f"Error processing image {i+1}: {str(e)}")
+                continue
+
+        if image_files:
+            file_list = '\n'.join([f"- {filename}" for filename in image_files])
+            return f"""## Images Available for Analysis:
+{file_list}
+
+These image files have been saved to your session directory. Please read and analyze them using the Read tool to understand their content and answer any questions about them."""
+
+        return ""

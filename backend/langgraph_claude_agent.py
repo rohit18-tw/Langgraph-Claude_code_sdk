@@ -65,8 +65,8 @@ class ClaudeCodeAgent:
                 allowed_tools=allowed_tools,
                 # MCP server configuration (pass as dictionary, not file path)
                 mcp_servers=mcp_servers,
-                # Increased turns for complex tasks
-                max_turns=15,
+                # No limit on turns for complex code generation tasks
+                max_turns=None,
                 # Enable verbose output and streaming JSON format using extra_args
                 extra_args={
                     "verbose": None,  # CLI flag without value
@@ -138,6 +138,8 @@ class ClaudeCodeAgent:
 
         # Set API key from environment
         env = os.environ.copy()
+        # Increase buffer limits for large file processing
+        env["PYTHONUNBUFFERED"] = "1"
         if 'ANTHROPIC_API_KEY' not in env:
             # Try to load from backend .env file
             env_path = Path(__file__).parent / '.env'
@@ -154,8 +156,8 @@ class ClaudeCodeAgent:
                 "claude", "-p", prompt,
                 "--verbose",
                 "--output-format", "stream-json",
-                "--permission-mode", self.permission_mode,
-                "--max-turns", "15"
+                "--permission-mode", self.permission_mode
+                # No max-turns limit - let it run until completion
             ]
 
             # Add allowed tools
@@ -197,7 +199,9 @@ class ClaudeCodeAgent:
                         continue
 
                     message_count += 1
-                    print(f"Raw message {message_count}: {line_text[:100]}...")
+                    # Reduced debug output - only print for actual errors
+                    if message_count % 10 == 0:  # Only every 10th message
+                        print(f"Processing message {message_count}...")
 
                     try:
                         # Parse JSON message
@@ -314,12 +318,23 @@ class ClaudeCodeAgent:
             print(f"Process completed with {message_count} messages, return code: {return_code}")
 
         except Exception as e:
-            print(f"Exception in streaming: {e}")
-            yield {
-                "type": "error",
-                "message": f"CLI execution error: {str(e)}",
-                "error": str(e)
-            }
+            error_msg = str(e)
+            print(f"Exception in streaming: {error_msg}")
+
+                        # Handle the specific separator/chunk error that occurs with large files
+            if "separator" in error_msg.lower() and "chunk" in error_msg.lower():
+                # Signal that this should be handled by fallback processing
+                yield {
+                    "type": "fallback_required",
+                    "message": f"Large response detected - fallback processing needed",
+                    "error": error_msg
+                }
+            else:
+                yield {
+                    "type": "error",
+                    "message": f"CLI execution error: {error_msg}",
+                    "error": error_msg
+                }
 
     async def continue_conversation(self, prompt: str) -> Dict[str, Any]:
         """Continue existing conversation in same session"""

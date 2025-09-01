@@ -313,6 +313,69 @@
   background-color: white;
 }
 
+/* Selected Images Preview in Input Area */
+.selected-images-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 12px;
+  background-color: #f8f9fa;
+  border-radius: 12px;
+  border: 1px solid #e0e0e0;
+}
+
+.selected-image-container {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.selected-image-preview {
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #d0d0d0;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.remove-image-button {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: #666;
+  color: white;
+  border: none;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.remove-image-button:hover {
+  background-color: #555;
+}
+
+.selected-image-name {
+  font-size: 10px;
+  color: #666;
+  margin-top: 4px;
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+}
+
 .input-container {
   display: flex;
   gap: 0.75rem;
@@ -486,6 +549,52 @@
 }
 
 /* Responsive design */
+/* Message Images */
+.message-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 0px; /* Remove bottom margin for cleaner look */
+}
+
+/* When message has only images (no text), add some padding */
+.message-content:has(.message-images):not(:has(.message-text)) {
+  padding: 0.5rem 1rem;
+}
+
+.message-image-container {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.message-image {
+  border-radius: 12px; /* More rounded like ChatGPT */
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
+  cursor: pointer;
+  border: 1px solid rgba(0, 0, 0, 0.05); /* Subtle border */
+}
+
+.message-image:hover {
+  transform: scale(1.02);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.image-name {
+  font-size: 11px;
+  color: #888;
+  margin-top: 6px;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: rgba(0, 0, 0, 0.05);
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-weight: 500;
+}
+
 @media (max-width: 768px) {
   .chat-interface {
     font-size: 0.9rem;

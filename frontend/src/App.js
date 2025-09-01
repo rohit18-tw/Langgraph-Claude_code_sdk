@@ -22,7 +22,12 @@ function App() {
 
   useEffect(() => {
     connectWebSocket();
-    loadSessionFiles();
+    // Only load session files if we're switching to an existing session
+    // or if we have uploaded files in state (for page refresh scenarios)
+    const hasExistingData = localStorage.getItem(`session_${sessionId}`);
+    if (hasExistingData) {
+      loadSessionFiles();
+    }
     return () => websocketRef.current?.close();
   }, [sessionId]);
 
@@ -49,8 +54,33 @@ function App() {
     const { type, message, timestamp, ...rest } = data;
 
     switch (type) {
+      case 'verbose':
+        // Prioritize verbose messages - these show exactly what Claude is doing
+        if (message) {
+          setCurrentProgress(message);
+          console.log('Verbose:', message); // Log for debugging
+        }
+        break;
+      case 'progress':
+        // Only show meaningful progress messages, skip generic ones
+        if (message &&
+            !message.includes('Processing your request') &&
+            !message.includes('Processing...') &&
+            !message.includes('Session Initialized')) {
+          setCurrentProgress(message);
+        }
+        break;
       case 'file_generation':
-        setCurrentProgress(message || 'Processing...');
+        // Show file generation progress
+        if (message) {
+          setCurrentProgress(message);
+        }
+        break;
+      case 'text':
+        // Handle streaming text content - show in real-time
+        if (rest.content) {
+          setCurrentProgress(`💭 Claude: ${rest.content.substring(0, 100)}${rest.content.length > 100 ? '...' : ''}`);
+        }
         break;
       case 'success':
         setCurrentProgress(null);
@@ -62,11 +92,22 @@ function App() {
         break;
       case 'error':
         setCurrentProgress(null);
-        addMessage('error', message || 'An error occurred', { timestamp, ...rest });
+        addMessage('error', message || rest.error || rest.message || 'An error occurred', { timestamp, ...rest });
         setIsLoading(false);
         break;
       case 'files_updated':
         setUploadedFiles(rest.files || []);
+        break;
+      case 'raw':
+        // Handle raw debug messages (optional - for development)
+        console.log('Raw message:', data);
+        break;
+      default:
+        // Handle any unknown message types - only show if it's a meaningful message
+        console.log('Unknown message type:', type, data);
+        if (message && !message.includes('Processing') && !message.includes('...')) {
+          setCurrentProgress(message);
+        }
         break;
     }
   };
@@ -77,6 +118,7 @@ function App() {
       sender,
       content,
       timestamp: metadata.timestamp || new Date().toISOString(),
+      images: metadata.images || null,
       metadata
     };
     setMessages(prev => [...prev, newMessage]);
@@ -106,7 +148,7 @@ function App() {
         },
       });
 
-      await loadSessionFiles();
+      await loadSessionFiles(); // Only call this AFTER files are actually uploaded
       addMessage('system', `Uploaded ${files.length} file(s) successfully`);
     } catch (error) {
       addMessage('error', `Failed to upload files: ${error.message}`);
@@ -114,37 +156,57 @@ function App() {
     }
   };
 
-  const handleSendMessage = async (message) => {
-    if (!message.trim()) return;
+  const handleSendMessage = async (message, images = null) => {
+    if (!message.trim() && (!images || images.length === 0)) return;
 
-    addMessage('user', message);
+    // Add message with images if provided
+    if (images && images.length > 0) {
+      addMessage('user', message, { images: images });
+    } else {
+      addMessage('user', message);
+    }
+
     setIsLoading(true);
-    setCurrentProgress('Processing your request...');
+    setCurrentProgress(null); // Don't set generic message, wait for verbose updates
 
     if (isConnected && websocketRef.current && websocketRef.current.readyState === WebSocket.OPEN) {
       try {
-        websocketRef.current.send(JSON.stringify({
+        const messageData = {
           message: message,
           session_id: sessionId
-        }));
+        };
+
+        // Include images if provided
+        if (images && images.length > 0) {
+          messageData.images = images;
+        }
+
+        websocketRef.current.send(JSON.stringify(messageData));
       } catch (error) {
         console.error('WebSocket send error:', error);
         // Fallback to HTTP API if WebSocket fails
-        await sendMessageViaHTTP(message);
+        await sendMessageViaHTTP(message, images);
       }
     } else {
       // Fallback to HTTP API
-      await sendMessageViaHTTP(message);
+      await sendMessageViaHTTP(message, images);
     }
   };
 
-  const sendMessageViaHTTP = async (message) => {
+  const sendMessageViaHTTP = async (message, images = null) => {
     try {
-      const response = await axios.post(`${API_BASE_URL}/chat`, {
+      const requestData = {
         message: message,
         session_id: sessionId,
         uploaded_files: uploadedFiles.map(f => f.path)
-      });
+      };
+
+      // Include images if provided
+      if (images && images.length > 0) {
+        requestData.images = images;
+      }
+
+      const response = await axios.post(`${API_BASE_URL}/chat`, requestData);
 
       if (response.data.success) {
         addMessage('assistant', response.data.message, {

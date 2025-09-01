@@ -61,12 +61,12 @@ class FileService:
     @staticmethod
     def list_session_files(session_id: str) -> List[FileInfo]:
         """List all files for a session"""
-        # First migrate any old files with UUID prefixes
-        FileService.migrate_old_files(session_id)
-
         session_dir = UPLOAD_DIR / session_id
         if not session_dir.exists():
             return []
+
+        # Only migrate files if the directory already exists
+        FileService.migrate_old_files(session_id)
 
         files = []
         for file_path in session_dir.rglob("*"):
@@ -156,12 +156,12 @@ class FileService:
     @staticmethod
     def create_context_message(session_id: str) -> str:
         """Create context message about uploaded files"""
-        # First migrate any old files with UUID prefixes
-        FileService.migrate_old_files(session_id)
-
         session_dir = UPLOAD_DIR / session_id
         if not session_dir.exists():
             return ""
+
+        # Only migrate files if the directory already exists
+        FileService.migrate_old_files(session_id)
 
         file_list = []
         for file_path in session_dir.rglob("*"):

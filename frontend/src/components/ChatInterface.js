@@ -1,11 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
+import ImageModal from './ImageModal';
 import './ChatInterface.css';
 
 const ChatInterface = ({ messages, onSendMessage, onFileUpload, isLoading, isConnected, currentProgress, onStopGeneration, uploadedFiles }) => {
   const [inputMessage, setInputMessage] = useState('');
   const [showFileUpload, setShowFileUpload] = useState(false);
   const [showUploadMenu, setShowUploadMenu] = useState(false);
+  const [imageModal, setImageModal] = useState({ isOpen: false, src: '', name: '' });
+  const [selectedImages, setSelectedImages] = useState([]);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -35,9 +38,15 @@ const ChatInterface = ({ messages, onSendMessage, onFileUpload, isLoading, isCon
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (inputMessage.trim() && !isLoading) {
-      onSendMessage(inputMessage);
+    if ((inputMessage.trim() || selectedImages.length > 0) && !isLoading) {
+      // Send message with images if any
+      if (selectedImages.length > 0) {
+        onSendMessage(inputMessage, selectedImages);
+      } else {
+        onSendMessage(inputMessage);
+      }
       setInputMessage('');
+      setSelectedImages([]);
     }
   };
 
@@ -73,13 +82,43 @@ const ChatInterface = ({ messages, onSendMessage, onFileUpload, isLoading, isCon
   };
 
   const renderMessageContent = (message) => {
-    const { sender, content } = message;
+    const { sender, content, images } = message;
 
-    if (sender === 'assistant' || sender === 'system') {
-      return <ReactMarkdown>{content}</ReactMarkdown>;
-    }
+    return (
+      <div>
+        {/* Render images if present */}
+        {images && images.length > 0 && (
+          <div className="message-images">
+            {images.map((image, index) => (
+              <div key={index} className="message-image-container">
+                <img
+                  src={image.dataUrl}
+                  alt={image.name}
+                  className="message-image"
+                  style={{maxWidth: '300px', maxHeight: '300px', borderRadius: '8px'}}
+                  onClick={() => {
+                    console.log('Image clicked:', image.name);
+                    setImageModal({
+                      isOpen: true,
+                      src: image.dataUrl,
+                      name: image.name
+                    });
+                  }}
+                />
+                <div className="image-name">{image.name}</div>
+              </div>
+            ))}
+          </div>
+        )}
 
-    return <div className="message-text">{content}</div>;
+        {/* Render text content only if it exists and is not empty */}
+        {content && content.trim() && (
+          sender === 'assistant' || sender === 'system'
+            ? <ReactMarkdown>{content}</ReactMarkdown>
+            : <div className="message-text">{content}</div>
+        )}
+      </div>
+    );
   };
 
   const renderMetadata = (metadata) => {
@@ -121,6 +160,33 @@ const ChatInterface = ({ messages, onSendMessage, onFileUpload, isLoading, isCon
     }
   };
 
+  const handleImageChange = async (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length > 0) {
+      try {
+        const imagePromises = files.map(file => {
+          return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve({
+              name: file.name,
+              dataUrl: e.target.result,
+              size: file.size
+            });
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          });
+        });
+
+        const newImages = await Promise.all(imagePromises);
+        setSelectedImages(prev => [...prev, ...newImages]);
+        e.target.value = ''; // Reset file input
+        setShowUploadMenu(false);
+      } catch (error) {
+        console.error('Image processing failed:', error);
+      }
+    }
+  };
+
   const handleUploadFiles = () => {
     fileInputRef.current?.click();
     setShowUploadMenu(false);
@@ -136,12 +202,23 @@ const ChatInterface = ({ messages, onSendMessage, onFileUpload, isLoading, isCon
     setShowUploadMenu(false);
   };
 
+  const removeSelectedImage = (indexToRemove) => {
+    setSelectedImages(prev => prev.filter((_, index) => index !== indexToRemove));
+  };
+
   return (
     <div className="chat-interface">
       <div className="chat-header">
         <h3>AI Assistant</h3>
         <div className="chat-status">
-          {isLoading && <span className="loading-indicator">Processing...</span>}
+          {isLoading && currentProgress && (
+            <span className="loading-indicator">
+              {currentProgress}
+            </span>
+          )}
+          {isLoading && !currentProgress && (
+            <span className="loading-indicator">Initializing...</span>
+          )}
           {!isConnected && <span className="connection-warning">Offline Mode</span>}
         </div>
       </div>
@@ -216,6 +293,30 @@ const ChatInterface = ({ messages, onSendMessage, onFileUpload, isLoading, isCon
       </div>
 
       <form className="message-input-form" onSubmit={handleSubmit}>
+        {/* Image Previews */}
+        {selectedImages.length > 0 && (
+          <div className="selected-images-preview">
+            {selectedImages.map((image, index) => (
+              <div key={index} className="selected-image-container">
+                <img
+                  src={image.dataUrl}
+                  alt={image.name}
+                  className="selected-image-preview"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeSelectedImage(index)}
+                  className="remove-image-button"
+                  title="Remove image"
+                >
+                  ×
+                </button>
+                <div className="selected-image-name">{image.name}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="input-container">
           <div className="upload-container">
             <button
@@ -262,14 +363,14 @@ const ChatInterface = ({ messages, onSendMessage, onFileUpload, isLoading, isCon
               multiple
               onChange={handleFileChange}
               className="hidden-file-input"
-              accept=".txt,.md,.js,.jsx,.ts,.tsx,.py,.html,.css,.json,.xml,.yml,.yaml"
+              accept=".txt,.md,.js,.jsx,.ts,.tsx,.py,.html,.css,.json,.xml,.yml,.yaml,.pdf"
             />
 
             <input
               ref={imageInputRef}
               type="file"
               multiple
-              onChange={handleFileChange}
+              onChange={handleImageChange}
               className="hidden-file-input"
               accept=".png,.jpg,.jpeg,.gif,.bmp,.svg,.webp"
             />
@@ -303,7 +404,7 @@ const ChatInterface = ({ messages, onSendMessage, onFileUpload, isLoading, isCon
 
           <button
             type="submit"
-            disabled={!inputMessage.trim() || isLoading}
+            disabled={(!inputMessage.trim() && selectedImages.length === 0) || isLoading}
             className="send-button"
           >
             {isLoading ? '●' : '→'}
@@ -323,6 +424,14 @@ const ChatInterface = ({ messages, onSendMessage, onFileUpload, isLoading, isCon
           </div>
         )}
       </form>
+
+      {/* Image Modal */}
+      <ImageModal
+        isOpen={imageModal.isOpen}
+        onClose={() => setImageModal({ isOpen: false, src: '', name: '' })}
+        imageSrc={imageModal.src}
+        imageName={imageModal.name}
+      />
     </div>
   );
 };

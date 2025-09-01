@@ -39,7 +39,7 @@ async def upload_files(session_id: str, files: List[UploadFile] = File(...)):
 async def chat(request: ChatMessage):
     """Process chat message (non-streaming)"""
     try:
-        result = await ClaudeService.process_chat_message(request.session_id, request.message)
+        result = await ClaudeService.process_chat_message(request.session_id, request.message, request.images)
         return ChatResponse(**result)
     except Exception as e:
         logger.error(f"Error processing chat: {str(e)}")
@@ -61,8 +61,9 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
             data = await websocket.receive_text()
             message_data = json.loads(data)
             user_message = message_data.get("message", "")
+            images = message_data.get("images", [])
 
-            if not user_message:
+            if not user_message and not images:
                 continue
 
             # Don't send generic acknowledgment, let Claude's verbose messages show instead
@@ -70,8 +71,8 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
             #     websocket, "status", "Processing your request..."
             # )
 
-            # Stream Claude response
-            await ClaudeService.stream_claude_response(websocket, session_id, user_message)
+            # Stream Claude response with images if provided
+            await ClaudeService.stream_claude_response(websocket, session_id, user_message, images)
 
     except WebSocketDisconnect:
         logger.info(f"WebSocket disconnected for session {session_id}")

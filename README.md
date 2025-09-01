@@ -2,7 +2,7 @@
 
 A full-stack web application that provides an interactive interface for Claude Code SDK with LangGraph integration. This application allows users to chat with Claude, upload files, and execute code tasks through a modern React frontend and FastAPI backend.
 
-## 🚀 Features
+## Features
 
 - **Interactive Chat Interface**: Real-time communication with Claude using WebSocket streaming
 - **File Upload & Management**: Upload and manage files per session for code analysis and manipulation
@@ -11,7 +11,7 @@ A full-stack web application that provides an interactive interface for Claude C
 - **Modern UI**: Clean, responsive React interface with session management
 - **RESTful API**: Well-documented FastAPI backend with comprehensive endpoints
 
-## 🏗️ Architecture
+## Architecture
 
 ```
 ├── backend/                 # FastAPI Backend Server
@@ -44,7 +44,7 @@ A full-stack web application that provides an interactive interface for Claude C
 └── README.md              # This file
 ```
 
-## 📋 Prerequisites
+## Prerequisites
 
 ### Required Software
 - **Python 3.8+** - For the backend server
@@ -56,7 +56,7 @@ A full-stack web application that provides an interactive interface for Claude C
   - Sign up at [Anthropic Console](https://console.anthropic.com/)
   - Create a new API key
 
-## 🛠️ Installation
+## Installation
 
 ### 1. Clone the Repository
 ```bash
@@ -94,7 +94,7 @@ REDIS_URL=redis://localhost:6379
 SESSION_TTL_HOURS=24
 ```
 
-**⚠️ Important**: Never commit your actual `.env` file to version control. The `.gitignore` file is configured to exclude `.env` files.
+**Important**: Never commit your actual `.env` file to version control. The `.gitignore` file is configured to exclude `.env` files.
 
 ### Environment File Security
 - The repository includes `.env.example` files showing the required structure
@@ -131,7 +131,7 @@ GENERATE_SOURCEMAP=false
 
 **Note**: The frontend `package.json` includes a proxy configuration that routes API calls to the backend server.
 
-## 🚀 Running the Application
+## Running the Application
 
 ### Start Backend Server
 ```bash
@@ -150,7 +150,7 @@ The frontend will start on `http://localhost:3000`
 ### Access the Application
 Open your browser and navigate to: `http://localhost:3000`
 
-## 📡 API Endpoints
+## API Endpoints
 
 ### REST API Endpoints
 
@@ -190,7 +190,7 @@ curl -X POST "http://localhost:8000/chat" \
 curl "http://localhost:8000/sessions/my-session/files"
 ```
 
-## 💡 Usage Examples
+## Usage Examples
 
 ### 1. Code Analysis
 1. Upload your code files using the file upload interface
@@ -212,7 +212,7 @@ curl "http://localhost:8000/sessions/my-session/files"
 - **Edit files**: "Update the database connection string in settings.py"
 - **Create files**: "Create a new React component for user profiles"
 
-## 🔧 Configuration Options
+## Configuration Options
 
 ### Backend Configuration (.env)
 ```bash
@@ -237,7 +237,7 @@ The frontend proxy is configured in `package.json`:
 }
 ```
 
-## 🔧 Development
+## Development
 
 ### Running in Development Mode
 
@@ -273,7 +273,7 @@ The React development server includes hot reloading for instant updates.
 - **`SessionSidebar.js`**: Session management and navigation
 - **`FileList.js`**: Display and manage uploaded files
 
-## 🛠️ Available Tools
+## Available Tools
 
 Claude has access to the following tools:
 - **Read**: Read file contents
@@ -285,7 +285,7 @@ Claude has access to the following tools:
 - **WebFetch**: Fetch web content
 - **WebSearch**: Search the web
 
-## 📚 Session Management
+## Session Management
 
 ### Session Continuity
 - Each user session maintains conversation context
@@ -298,7 +298,7 @@ Claude has access to the following tools:
 - Each session has isolated file storage
 - Files can be listed, viewed, and cleared per session
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Common Issues
 
@@ -346,7 +346,7 @@ This will provide detailed logging for troubleshooting.
 - Backend logs: Console output from the FastAPI server
 - Frontend logs: Browser developer console
 
-## 🔐 Security Considerations
+## Security Considerations
 
 ### Production Deployment
 - Set specific CORS origins instead of `["*"]`
@@ -361,7 +361,7 @@ This will provide detailed logging for troubleshooting.
 - Monitor upload directory size
 - Implement rate limiting for uploads
 
-## 📈 Performance
+## Performance
 
 ### Optimization Tips
 - Use WebSocket streaming for better user experience
@@ -374,7 +374,7 @@ This will provide detailed logging for troubleshooting.
 - Check upload directory size regularly
 - Monitor API response times and error rates
 
-## 🤝 Contributing
+## Contributing
 
 1. Fork the repository
 2. Create a feature branch: `git checkout -b feature/new-feature`
@@ -383,11 +383,11 @@ This will provide detailed logging for troubleshooting.
 5. Push to the branch: `git push origin feature/new-feature`
 6. Submit a pull request
 
-## 📄 License
+## License
 
 [Add your license information here]
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - [Anthropic](https://www.anthropic.com/) for Claude API
 - [LangGraph](https://github.com/langchain-ai/langgraph) for the workflow framework
