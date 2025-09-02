@@ -1,8 +1,6 @@
 from dotenv import load_dotenv
 import os
 import asyncio
-import sys
-import argparse
 from pathlib import Path
 from typing import TypedDict, List, Optional, Any, Dict, AsyncGenerator
 from langgraph.graph import StateGraph, END
@@ -11,7 +9,6 @@ from claude_code_sdk import query, ClaudeCodeOptions, ClaudeSDKClient, Message
 import json
 import aiofiles
 from PIL import Image
-import httpx
 
 load_dotenv()
 
@@ -418,124 +415,4 @@ class ClaudeCodeLangGraphWorkflow:
         """Cleanup resources"""
         await self.agent_nodes.cleanup()
 
-def get_user_prompt() -> str:
-    # Check for piped input
-    if not sys.stdin.isatty():
-        piped_input = sys.stdin.read().strip()
-        if piped_input:
-            return piped_input
 
-    # Parse command line arguments
-    parser = argparse.ArgumentParser(description="Claude Code LangGraph Agent")
-    parser.add_argument("-p", "--prompt", type=str, help="The coding task prompt")
-    parser.add_argument("-i", "--interactive", action="store_true", help="Interactive mode")
-    parser.add_argument("--permission-mode", type=str, default="acceptEdits",
-                       choices=["default", "acceptEdits", "bypassPermissions", "plan"])
-
-    args = parser.parse_args()
-
-    if args.prompt:
-        return args.prompt
-
-    if args.interactive or len(sys.argv) == 1:
-        try:
-            prompt = input("Enter task: ").strip()
-            if prompt.lower() in ['quit', 'exit', 'q']:
-                sys.exit(0)
-            return prompt
-        except KeyboardInterrupt:
-            print("\nBye!")
-            sys.exit(0)
-
-    parser.print_help()
-    sys.exit(1)
-
-async def run_single_task(prompt: str, permission_mode: str = "acceptEdits"):
-    workflow = ClaudeCodeLangGraphWorkflow()
-    workflow.agent_nodes.claude_agent.permission_mode = permission_mode
-
-    try:
-        print(f"Executing: {prompt}")
-        print("=" * 80)
-
-        # Use streaming method for command line to show real-time progress
-        async for stream_data in workflow.agent_nodes.claude_agent.execute_claude_code_streaming(prompt):
-            message_type = stream_data.get('type', '')
-
-            # Handle verbose messages (includes init, tool start, etc.)
-            if message_type == 'verbose':
-                subtype = stream_data.get('subtype', '')
-                message = stream_data.get('message', '')
-
-                if subtype == 'init':
-                    print(f"Init: {message}")
-                elif subtype == 'user_input':
-                    print(f"Status: {message}")
-                elif subtype == 'tool_start':
-                    print(f"Tool: {message}")
-                else:
-                    print(f"Progress: {message}")
-
-            # Handle text content from Claude
-            elif message_type == 'text':
-                content = stream_data.get('content', '')
-                if content.strip():
-                    print(f"Claude: {content}")
-
-            # Handle thinking/reasoning (if available)
-            elif message_type == 'thinking':
-                print(f"Thinking: {stream_data['message']}")
-                if stream_data.get('details'):
-                    details = stream_data['details']
-                    if len(details) > 100:
-                        details = details[:100] + "..."
-                    print(f"   {details}")
-
-            elif stream_data.get('type') == 'success':
-                print("\n" + "=" * 80)
-                print("Task Completed Successfully!")
-                print("=" * 80)
-
-                if stream_data.get('result'):
-                    print(f"\n{stream_data['result']}")
-
-                if stream_data.get('metadata'):
-                    metadata = stream_data['metadata']
-                    print(f"\nExecution Summary:")
-                    print(f"   Duration: {metadata.get('duration_ms', 0)}ms")
-                    print(f"   Turns: {metadata.get('num_turns', 0)}")
-                    print(f"   Cost: ${metadata.get('total_cost_usd', 0):.4f}")
-                    if metadata.get('session_id'):
-                        print(f"   Session: {metadata['session_id'][:8]}...")
-                break
-
-            elif stream_data.get('type') == 'error':
-                print("\n" + "=" * 80)
-                print("Task Failed!")
-                print("=" * 80)
-                print(f"Error: {stream_data.get('message', 'Unknown error')}")
-                break
-
-    except Exception as e:
-        print(f"Error: {str(e)}")
-
-async def main():
-    parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("--permission-mode", type=str, default="acceptEdits")
-    args, _ = parser.parse_known_args()
-
-    try:
-        prompt = get_user_prompt()
-        if not prompt:
-            print("No prompt provided!")
-            return
-
-        await run_single_task(prompt, args.permission_mode)
-
-    except KeyboardInterrupt:
-        print("\nBye!")
-    except Exception as e:
-        print(f"Error: {str(e)}")
-
-if __name__ == "__main__":
-    asyncio.run(main())

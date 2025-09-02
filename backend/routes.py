@@ -36,20 +36,6 @@ async def upload_files(session_id: str, files: List[UploadFile] = File(...)):
         logger.error(f"Error uploading files: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error uploading files: {str(e)}")
 
-@router.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatMessage):
-    """Process chat message (non-streaming)"""
-    try:
-        result = await ClaudeService.process_chat_message(request.session_id, request.message, request.images)
-        return ChatResponse(**result)
-    except Exception as e:
-        logger.error(f"Error processing chat: {str(e)}")
-        return ChatResponse(
-            success=False,
-            message=f"Error: {str(e)}",
-            session_id=request.session_id
-        )
-
 
 
 @router.get("/sessions/{session_id}/files")
@@ -171,7 +157,7 @@ async def process_chat_with_sse(session_id: str, message: str, images: list = No
         user_message = message
         if images and len(images) > 0:
             image_context = ClaudeService._process_image_data(images, session_id)
-            user_message = f"{message}\n\n{image_context}" if message else image_context
+            user_message = f"{message}{image_context}" if message else image_context.strip()
 
         # Get file context
         file_context = FileService.create_context_message(session_id)
