@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import axios from 'axios';
 import SessionSidebar from './components/SessionSidebar';
@@ -6,6 +6,7 @@ import ChatInterface from './components/ChatInterface';
 import FileList from './components/FileList';
 import ConnectionStatus from './components/ConnectionStatus';
 import MCPManager from './components/MCPManager';
+import useSSE from './hooks/useSSE';
 import './App.css';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
@@ -14,104 +15,12 @@ function App() {
   const [sessionId, setSessionId] = useState(() => uuidv4());
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [messages, setMessages] = useState([]);
-  const [isConnected, setIsConnected] = useState(false);
+  const [isConnected, setIsConnected] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [currentProgress, setCurrentProgress] = useState(null);
   const [showMCPManager, setShowMCPManager] = useState(false);
-  const websocketRef = useRef(null);
 
-  useEffect(() => {
-    connectWebSocket();
-    // Only load session files if we're switching to an existing session
-    // or if we have uploaded files in state (for page refresh scenarios)
-    const hasExistingData = localStorage.getItem(`session_${sessionId}`);
-    if (hasExistingData) {
-      loadSessionFiles();
-    }
-    return () => websocketRef.current?.close();
-  }, [sessionId]);
-
-  const connectWebSocket = () => {
-    const wsBaseUrl = process.env.REACT_APP_WS_URL ||
-      API_BASE_URL.replace('https://', 'wss://').replace('http://', 'ws://');
-    const wsUrl = `${wsBaseUrl}/ws/${sessionId}`;
-    websocketRef.current = new WebSocket(wsUrl);
-
-    websocketRef.current.onopen = () => setIsConnected(true);
-    websocketRef.current.onclose = () => {
-      setIsConnected(false);
-      setIsLoading(false);
-      setCurrentProgress(null);
-      setTimeout(connectWebSocket, 3000);
-    };
-    websocketRef.current.onerror = () => setIsConnected(false);
-    websocketRef.current.onmessage = (event) => {
-      handleWebSocketMessage(JSON.parse(event.data));
-    };
-  };
-
-  const handleWebSocketMessage = (data) => {
-    const { type, message, timestamp, ...rest } = data;
-
-    switch (type) {
-      case 'verbose':
-        // Prioritize verbose messages - these show exactly what Claude is doing
-        if (message) {
-          setCurrentProgress(message);
-          console.log('Verbose:', message); // Log for debugging
-        }
-        break;
-      case 'progress':
-        // Only show meaningful progress messages, skip generic ones
-        if (message &&
-            !message.includes('Processing your request') &&
-            !message.includes('Processing...') &&
-            !message.includes('Session Initialized')) {
-          setCurrentProgress(message);
-        }
-        break;
-      case 'file_generation':
-        // Show file generation progress
-        if (message) {
-          setCurrentProgress(message);
-        }
-        break;
-      case 'text':
-        // Handle streaming text content - show in real-time
-        if (rest.content) {
-          setCurrentProgress(`💭 Claude: ${rest.content.substring(0, 100)}${rest.content.length > 100 ? '...' : ''}`);
-        }
-        break;
-      case 'success':
-        setCurrentProgress(null);
-        addMessage('assistant', message || rest.result || 'Task completed successfully!', {
-          timestamp,
-          metadata: rest.metadata
-        });
-        setIsLoading(false);
-        break;
-      case 'error':
-        setCurrentProgress(null);
-        addMessage('error', message || rest.error || rest.message || 'An error occurred', { timestamp, ...rest });
-        setIsLoading(false);
-        break;
-      case 'files_updated':
-        setUploadedFiles(rest.files || []);
-        break;
-      case 'raw':
-        // Handle raw debug messages (optional - for development)
-        console.log('Raw message:', data);
-        break;
-      default:
-        // Handle any unknown message types - only show if it's a meaningful message
-        console.log('Unknown message type:', type, data);
-        if (message && !message.includes('Processing') && !message.includes('...')) {
-          setCurrentProgress(message);
-        }
-        break;
-    }
-  };
-
+  // Helper function to add messages
   const addMessage = (sender, content, metadata = {}) => {
     const newMessage = {
       id: uuidv4(),
@@ -123,6 +32,80 @@ function App() {
     };
     setMessages(prev => [...prev, newMessage]);
   };
+
+    // SSE Message Handlers (defined before useSSE hook)
+  const handleSSEMessage = useCallback((data) => {
+    const { type, message, timestamp, ...rest } = data;
+
+    switch (type) {
+      case 'verbose':
+        // Enhanced verbose messages - this is what we want!
+        if (message) {
+          setCurrentProgress(message);
+        }
+        break;
+      case 'progress':
+        // Only show meaningful progress messages
+        if (message &&
+            !message.includes('Processing your request') &&
+            !message.includes('Processing...') &&
+            !message.includes('Session Initialized')) {
+          setCurrentProgress(message);
+        }
+        break;
+      case 'text':
+        // Streaming text content from Claude - don't add message here
+        // Wait for 'success' event which has the complete response with metadata
+        break;
+      case 'files_updated':
+        setUploadedFiles(rest.files || []);
+        if (rest.new_files && rest.new_files.length > 0) {
+          setCurrentProgress(`📁 Created ${rest.new_files.length} new file(s)`);
+          setTimeout(() => setCurrentProgress(null), 3000);
+        }
+        break;
+      case 'success':
+        setIsLoading(false);
+        setCurrentProgress(null);
+        if (rest.result && rest.result.trim()) {
+          addMessage('assistant', rest.result, { timestamp, metadata: rest.metadata });
+        }
+        break;
+      case 'error':
+        setIsLoading(false);
+        setCurrentProgress(null);
+        addMessage('error', message || rest.error || rest.message || 'An error occurred', {
+          timestamp,
+          ...rest
+        });
+        break;
+      default:
+        // Unknown message type, ignore
+    }
+  }, [addMessage]);
+
+  const handleSSEError = useCallback((error) => {
+    addMessage('error', `Connection error: ${error}`);
+    setIsConnected(false);
+  }, [addMessage]);
+
+  // Initialize SSE hook with handlers
+  const { sseStatus } = useSSE(sessionId, handleSSEMessage, handleSSEError);
+
+  // Update connection status based on SSE
+  useEffect(() => {
+    setIsConnected(sseStatus === 'connected');
+  }, [sseStatus]);
+
+  useEffect(() => {
+    // Load session files on session change
+    const hasExistingData = localStorage.getItem(`session_${sessionId}`);
+    if (hasExistingData) {
+      loadSessionFiles();
+    }
+  }, [sessionId]);
+
+
 
   const loadSessionFiles = async () => {
     try {
@@ -149,7 +132,6 @@ function App() {
       });
 
       await loadSessionFiles(); // Only call this AFTER files are actually uploaded
-      addMessage('system', `Uploaded ${files.length} file(s) successfully`);
     } catch (error) {
       addMessage('error', `Failed to upload files: ${error.message}`);
       throw error;
@@ -159,69 +141,45 @@ function App() {
   const handleSendMessage = async (message, images = null) => {
     if (!message.trim() && (!images || images.length === 0)) return;
 
-    // Add message with images if provided
-    if (images && images.length > 0) {
-      addMessage('user', message, { images: images });
-    } else {
-      addMessage('user', message);
-    }
-
-    setIsLoading(true);
-    setCurrentProgress(null); // Don't set generic message, wait for verbose updates
-
-    if (isConnected && websocketRef.current && websocketRef.current.readyState === WebSocket.OPEN) {
-      try {
-        const messageData = {
-          message: message,
-          session_id: sessionId
-        };
-
-        // Include images if provided
-        if (images && images.length > 0) {
-          messageData.images = images;
-        }
-
-        websocketRef.current.send(JSON.stringify(messageData));
-      } catch (error) {
-        console.error('WebSocket send error:', error);
-        // Fallback to HTTP API if WebSocket fails
-        await sendMessageViaHTTP(message, images);
-      }
-    } else {
-      // Fallback to HTTP API
-      await sendMessageViaHTTP(message, images);
-    }
-  };
-
-  const sendMessageViaHTTP = async (message, images = null) => {
     try {
-      const requestData = {
-        message: message,
-        session_id: sessionId,
-        uploaded_files: uploadedFiles.map(f => f.path)
-      };
-
-      // Include images if provided
+      // Add user message immediately
       if (images && images.length > 0) {
-        requestData.images = images;
+        addMessage('user', message, { images: images });
+      } else {
+        addMessage('user', message);
       }
 
-      const response = await axios.post(`${API_BASE_URL}/chat`, requestData);
+      setIsLoading(true);
+      setCurrentProgress('Sending message...');
+
+      // Send message via new SSE endpoint
+      const response = await axios.post(`${API_BASE_URL}/chat/sse`, {
+        session_id: sessionId,
+        message: message,
+        images: images || []
+      }, {
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true'
+        }
+      });
 
       if (response.data.success) {
-        addMessage('assistant', response.data.message, {
-          metadata: response.data.metadata
-        });
+        console.log('✅ Message sent successfully, SSE will handle streaming');
+        // SSE will handle the streaming response automatically
       } else {
-        addMessage('error', response.data.message);
+        throw new Error(response.data.message || 'Failed to send message');
       }
+
     } catch (error) {
-      addMessage('error', `Failed to send message: ${error.message}`);
-    } finally {
+      console.error('❌ Error sending message:', error);
       setIsLoading(false);
       setCurrentProgress(null);
+      addMessage('error', `Failed to send message: ${error.message}`);
     }
   };
+
+
 
   const handleClearSession = async () => {
     try {
@@ -230,19 +188,17 @@ function App() {
       });
       setUploadedFiles([]);
       setMessages([]);
-      addMessage('system', 'Session cleared successfully');
     } catch (error) {
       addMessage('error', `Failed to clear session: ${error.message}`);
     }
   };
 
   const handleStopGeneration = () => {
-    if (websocketRef.current && isLoading) {
-      websocketRef.current.close();
+    if (isLoading) {
       setIsLoading(false);
       setCurrentProgress(null);
-      addMessage('system', 'Code generation stopped by user');
-      setTimeout(connectWebSocket, 1000);
+      // Note: With SSE, we can't easily stop server-side processing
+      // But we can stop showing progress on the frontend
     }
   };
 
@@ -269,10 +225,7 @@ function App() {
     setMessages([]);
     setUploadedFiles([]);
 
-    // Add welcome message to new session
-    setTimeout(() => {
-      addMessage('system', 'New session started');
-    }, 100);
+
   };
 
   const saveSessionData = (sessionIdToSave, messagesToSave, filesToSave) => {
@@ -339,15 +292,12 @@ function App() {
       setMessages([]);
       setUploadedFiles([]);
 
-      // Add welcome message to new session
-      setTimeout(() => {
-        addMessage('system', 'Previous session was deleted. New session started.');
-      }, 100);
+
     }
   };
 
   const handleMCPConfigUpdate = (config) => {
-    addMessage('system', 'MCP configuration updated successfully. The backend will use the new configuration for future requests.');
+    // MCP configuration updated - no message needed
   };
 
   return (
