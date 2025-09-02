@@ -67,11 +67,6 @@ class ClaudeCodeAgent:
                 mcp_servers=mcp_servers,
                 # No limit on turns for complex code generation tasks
                 max_turns=None,
-                # Enable verbose output and streaming JSON format using extra_args
-                extra_args={
-                    "verbose": None,  # CLI flag without value
-                    "output-format": "stream-json"  # CLI flag with value
-                },
                 # Enhanced system prompt for web and image capabilities
                 append_system_prompt=(
                     "You have access to web search, GitHub integration, and image processing capabilities. "
@@ -131,115 +126,55 @@ class ClaudeCodeAgent:
         return result_data
 
     async def execute_claude_code_streaming(self, prompt: str) -> AsyncGenerator[Dict[str, Any], None]:
-        """Stream Claude Code execution using direct CLI for proper verbose output"""
-        import json
+        """Stream Claude Code execution using SDK with fallback to non-streaming"""
         import asyncio
-        import os
-
-        # Set API key from environment
-        env = os.environ.copy()
-        # Increase buffer limits for large file processing
-        env["PYTHONUNBUFFERED"] = "1"
-        if 'ANTHROPIC_API_KEY' not in env:
-            # Try to load from backend .env file
-            env_path = Path(__file__).parent / '.env'
-            if env_path.exists():
-                with open(env_path) as f:
-                    for line in f:
-                        if line.strip() and not line.startswith('#'):
-                            key, value = line.strip().split('=', 1)
-                            env[key] = value.strip('"\'')
 
         try:
-            # Prepare the command with proper verbose and stream-json flags
-            cmd = [
-                "claude", "-p", prompt,
-                "--verbose",
-                "--output-format", "stream-json",
-                "--permission-mode", self.permission_mode
-                # No max-turns limit - let it run until completion
-            ]
+            # Initialize session
+            yield {
+                "type": "verbose",
+                "subtype": "init",
+                "message": "Session initialized - Model: Claude, SDK Mode",
+                "raw_data": {"type": "system", "subtype": "init"}
+            }
 
-            # Add allowed tools
-            allowed_tools = [
-                "Read", "Write", "Edit", "Bash", "LS", "Grep",
-                "WebFetch", "WebSearch",
-                "mcp__github", "mcp__filesystem", "mcp__web"
-            ]
-            cmd.extend(["--allowedTools", ",".join(allowed_tools)])
+            # User input acknowledgment
+            yield {
+                "type": "verbose",
+                "subtype": "user_input",
+                "message": "Processing your request...",
+                "raw_data": {"type": "user", "content": prompt}
+            }
 
-            # Add MCP config if it exists
-            mcp_config_path = self.session_directory.parent / "mcp_config.json"
-            if mcp_config_path.exists():
-                cmd.extend(["--mcp-config", str(mcp_config_path)])
+            # Try SDK streaming with timeout
+            try:
+                client = await self._get_client()
+                await client.query(prompt)
 
-            print(f"Executing: {' '.join(cmd)}")
+                # Add timeout to prevent hanging
+                timeout_seconds = 30
+                full_response = []
 
-            # Start the subprocess with proper environment
-            process = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                env=env,
-                cwd=str(self.session_directory.resolve())
-            )
+                yield {
+                    "type": "verbose",
+                    "subtype": "processing",
+                    "message": "Waiting for Claude response...",
+                }
 
-            message_count = 0
+                # Use asyncio.wait_for to add timeout
+                async def process_response():
+                    async for message in client.receive_response():
+                        message_type = type(message).__name__
 
-            # Read stdout line by line and process JSON messages
-            async def read_stdout():
-                nonlocal message_count
-                while True:
-                    line = await process.stdout.readline()
-                    if not line:
-                        break
 
-                    line_text = line.decode().strip()
-                    if not line_text:
-                        continue
+                        # Handle content blocks
+                        if hasattr(message, 'content') and message.content:
+                            for block in message.content:
+                                # Try to detect tool usage
+                                if hasattr(block, 'type') and getattr(block, 'type') == 'tool_use':
+                                    tool_name = getattr(block, 'name', 'unknown')
+                                    tool_input = getattr(block, 'input', {})
 
-                    message_count += 1
-                    # Reduced debug output - only print for actual errors
-                    if message_count % 10 == 0:  # Only every 10th message
-                        print(f"Processing message {message_count}...")
-
-                    try:
-                        # Parse JSON message
-                        data = json.loads(line_text)
-                        msg_type = data.get('type', '')
-
-                        # System initialization message
-                        if msg_type == 'system' and data.get('subtype') == 'init':
-                            model = data.get('model', 'claude')
-                            tools = data.get('tools', [])
-                            yield {
-                                "type": "verbose",
-                                "subtype": "init",
-                                "message": f"Session initialized - Model: {model}, Tools: {len(tools)}",
-                                "raw_data": data
-                            }
-
-                        # User input message
-                        elif msg_type == 'user':
-                            yield {
-                                "type": "verbose",
-                                "subtype": "user_input",
-                                "message": "Processing your request...",
-                                "raw_data": data
-                            }
-
-                        # Assistant response message
-                        elif msg_type == 'assistant':
-                            message_obj = data.get('message', {})
-                            content = message_obj.get('content', [])
-
-                            # Process each content block
-                            for block in content:
-                                if block.get('type') == 'tool_use':
-                                    tool_name = block.get('name', 'unknown')
-                                    tool_input = block.get('input', {})
-
-                                    # Yield tool usage message
                                     formatted_msg = self._format_tool_message(tool_name, tool_input)
                                     yield {
                                         "type": "verbose",
@@ -249,91 +184,68 @@ class ClaudeCodeAgent:
                                         "tool_input": tool_input
                                     }
 
-                                elif block.get('type') == 'text' and block.get('text', '').strip():
-                                    # Yield text content
-                                    yield {
-                                        "type": "text",
-                                        "content": block['text'].strip(),
-                                        "raw_data": data
-                                    }
+                                # Handle text content
+                                elif hasattr(block, 'text'):
+                                    text_content = getattr(block, 'text', '').strip()
+                                    if text_content:
+                                        full_response.append(text_content)
+                                        yield {
+                                            "type": "text",
+                                            "content": text_content,
+                                        }
 
-                        # Final result message
-                        elif msg_type == 'result':
-                            result = data.get('result', 'Task completed')
-                            is_error = data.get('is_error', False)
+                        # Handle completion
+                        if message_type == "ResultMessage":
+                            final_result = ''.join(full_response)
+                            metadata = {
+                                "total_cost_usd": getattr(message, 'total_cost_usd', 0),
+                                "duration_ms": getattr(message, 'duration_ms', 0),
+                                "num_turns": getattr(message, 'num_turns', 0),
+                                "session_id": getattr(message, 'session_id', None)
+                            }
 
-                            if is_error:
-                                yield {
-                                    "type": "error",
-                                    "message": result,
-                                    "error": result,
-                                    "raw_data": data
-                                }
-                            else:
-                                yield {
-                                    "type": "success",
-                                    "result": result,
-                                    "metadata": {
-                                        "total_cost_usd": data.get('total_cost_usd', 0),
-                                        "duration_ms": data.get('duration_ms', 0),
-                                        "num_turns": data.get('num_turns', 0),
-                                        "session_id": data.get('session_id', None)
-                                    },
-                                    "raw_data": data
-                                }
-                            break
+                            yield {
+                                "type": "success",
+                                "result": final_result,
+                                "metadata": metadata,
+                            }
+                            return
 
-                        # Forward all raw messages for debugging
-                        yield {
-                            "type": "raw",
-                            "data": data
-                        }
+                        elif message_type == "ErrorMessage":
+                            error_content = getattr(message, 'error', 'Unknown error occurred')
+                            yield {
+                                "type": "error",
+                                "message": error_content,
+                                "error": error_content,
+                            }
+                            return
 
-                    except json.JSONDecodeError as e:
-                        # Handle non-JSON lines (verbose output)
-                        yield {
-                            "type": "verbose",
-                            "subtype": "output",
-                            "message": line_text,
-                            "error": f"JSON parse error: {e}"
-                        }
+                # Execute the streaming
+                try:
+                    async for result in process_response():
+                        yield result
+                except Exception as streaming_error:
+                    raise streaming_error
 
-            # Process messages from stdout
-            async for message in read_stdout():
-                yield message
-
-            # Wait for process completion
-            return_code = await process.wait()
-
-            # Handle stderr if there are errors
-            if return_code != 0:
-                stderr_output = await process.stderr.read()
-                if stderr_output:
-                    yield {
-                        "type": "error",
-                        "message": f"Process failed with code {return_code}",
-                        "error": stderr_output.decode().strip()
-                    }
-
-            print(f"Process completed with {message_count} messages, return code: {return_code}")
+            except Exception as sdk_error:
+                # Fall back to non-streaming immediately
+                raise sdk_error
 
         except Exception as e:
-            error_msg = str(e)
-            print(f"Exception in streaming: {error_msg}")
+            # Fall back to non-streaming execution
+            result = await self.execute_claude_code(prompt)
 
-                        # Handle the specific separator/chunk error that occurs with large files
-            if "separator" in error_msg.lower() and "chunk" in error_msg.lower():
-                # Signal that this should be handled by fallback processing
+            if result.get("error"):
                 yield {
-                    "type": "fallback_required",
-                    "message": f"Large response detected - fallback processing needed",
-                    "error": error_msg
+                    "type": "error",
+                    "message": result["error"],
+                    "error": result["error"]
                 }
             else:
                 yield {
-                    "type": "error",
-                    "message": f"CLI execution error: {error_msg}",
-                    "error": error_msg
+                    "type": "success",
+                    "result": result.get("result", "Task completed"),
+                    "metadata": result.get("metadata", {}),
                 }
 
     async def continue_conversation(self, prompt: str) -> Dict[str, Any]:
@@ -548,58 +460,36 @@ async def run_single_task(prompt: str, permission_mode: str = "acceptEdits"):
 
         # Use streaming method for command line to show real-time progress
         async for stream_data in workflow.agent_nodes.claude_agent.execute_claude_code_streaming(prompt):
-            if stream_data.get('type') == 'status':
-                print(f"Status: {stream_data['message']}")
-                if stream_data.get('details'):
-                    print(f"   {stream_data['details']}")
+            message_type = stream_data.get('type', '')
 
-            elif stream_data.get('type') == 'init':
-                print(f"Init: {stream_data['message']}")
-                if stream_data.get('details'):
-                    print(f"   {stream_data['details']}")
+            # Handle verbose messages (includes init, tool start, etc.)
+            if message_type == 'verbose':
+                subtype = stream_data.get('subtype', '')
+                message = stream_data.get('message', '')
 
-            elif stream_data.get('type') == 'tool_use':
-                tool_name = stream_data.get('tool_name', '')
-                tool_input = stream_data.get('tool_input', {})
-
-                # Show simple, clean tool usage
-                if tool_name == 'LS':
-                    path = tool_input.get('path', '')
-                    print(f"Listing: {path}")
-                elif tool_name == 'Read':
-                    path = tool_input.get('file_path', '')
-                    print(f"Reading: {path}")
-                elif tool_name == 'Write':
-                    path = tool_input.get('file_path', '') or tool_input.get('path', '')
-                    print(f"Writing: {path}")
-                elif tool_name == 'Edit':
-                    path = tool_input.get('file_path', '') or tool_input.get('path', '')
-                    print(f"Editing: {path}")
-                elif tool_name == 'Bash':
-                    command = tool_input.get('command', '')
-                    print(f"Running: {command}")
-                elif tool_name == 'TodoWrite':
-                    print(f"Writing todo items")
+                if subtype == 'init':
+                    print(f"Init: {message}")
+                elif subtype == 'user_input':
+                    print(f"Status: {message}")
+                elif subtype == 'tool_start':
+                    print(f"Tool: {message}")
                 else:
-                    print(f"{tool_name}")
+                    print(f"Progress: {message}")
 
-            elif stream_data.get('type') == 'thinking':
-                print(f"{stream_data['message']}")
+            # Handle text content from Claude
+            elif message_type == 'text':
+                content = stream_data.get('content', '')
+                if content.strip():
+                    print(f"Claude: {content}")
+
+            # Handle thinking/reasoning (if available)
+            elif message_type == 'thinking':
+                print(f"Thinking: {stream_data['message']}")
                 if stream_data.get('details'):
-                    # Show truncated thinking details
                     details = stream_data['details']
                     if len(details) > 100:
                         details = details[:100] + "..."
                     print(f"   {details}")
-
-            elif stream_data.get('type') == 'tool_result':
-                print(f"{stream_data['message']}")
-                if stream_data.get('details'):
-                    # Show truncated tool result
-                    details = stream_data['details']
-                    if len(details) > 200:
-                        details = details[:200] + "..."
-                    print(f"   Result: {details}")
 
             elif stream_data.get('type') == 'success':
                 print("\n" + "=" * 80)

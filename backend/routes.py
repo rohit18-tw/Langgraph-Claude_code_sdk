@@ -1,13 +1,15 @@
 import json
 import logging
 import os
+import asyncio
 from typing import List
-from fastapi import APIRouter, UploadFile, File, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, UploadFile, File, HTTPException, Request
 from pydantic import BaseModel
 
 from models import ChatMessage, ChatResponse, FileUploadResponse
 from services.file_service import FileService
 from services.claude_service import ClaudeService
+from services.sse_service import sse_manager, create_sse_stream
 
 # MCP Configuration model
 class MCPConfig(BaseModel):
@@ -16,8 +18,7 @@ class MCPConfig(BaseModel):
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# Store active WebSocket connections
-active_connections = {}
+
 
 @router.get("/")
 async def health_check():
@@ -49,37 +50,7 @@ async def chat(request: ChatMessage):
             session_id=request.session_id
         )
 
-@router.websocket("/ws/{session_id}")
-async def websocket_endpoint(websocket: WebSocket, session_id: str):
-    """WebSocket endpoint for real-time streaming chat"""
-    await websocket.accept()
-    active_connections[session_id] = websocket
 
-    try:
-        while True:
-            # Receive message from client
-            data = await websocket.receive_text()
-            message_data = json.loads(data)
-            user_message = message_data.get("message", "")
-            images = message_data.get("images", [])
-
-            if not user_message and not images:
-                continue
-
-            # Don't send generic acknowledgment, let Claude's verbose messages show instead
-            # await ClaudeService.send_websocket_message(
-            #     websocket, "status", "Processing your request..."
-            # )
-
-            # Stream Claude response with images if provided
-            await ClaudeService.stream_claude_response(websocket, session_id, user_message, images)
-
-    except WebSocketDisconnect:
-        logger.info(f"WebSocket disconnected for session {session_id}")
-        active_connections.pop(session_id, None)
-    except Exception as e:
-        logger.error(f"WebSocket error for session {session_id}: {str(e)}")
-        active_connections.pop(session_id, None)
 
 @router.get("/sessions/{session_id}/files")
 async def list_session_files(session_id: str):
@@ -147,3 +118,135 @@ async def update_mcp_config(config: MCPConfig):
     except Exception as e:
         logger.error(f"Error updating MCP config: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error updating MCP config: {str(e)}")
+
+# SSE Routes
+@router.get("/stream/{session_id}")
+async def sse_stream(session_id: str, request: Request):
+    """SSE endpoint for real-time streaming updates"""
+    return await create_sse_stream(session_id, request)
+
+@router.post("/chat/sse", response_model=ChatResponse)
+async def chat_with_sse(request: ChatMessage):
+    """Enhanced chat endpoint that uses SSE for streaming responses"""
+    from services.claude_service import ClaudeService
+
+    try:
+        # Start processing in background and stream via SSE
+        task_id = f"task_{request.session_id}_{int(asyncio.get_event_loop().time() * 1000)}"
+
+        # Start Claude processing in background
+        asyncio.create_task(
+            process_chat_with_sse(request.session_id, request.message, request.images, task_id)
+        )
+
+        return ChatResponse(
+            success=True,
+            message="Processing started - connect to SSE stream for updates",
+            session_id=request.session_id,
+            metadata={"task_id": task_id}
+        )
+
+    except Exception as e:
+        logger.error(f"Error starting SSE chat: {str(e)}")
+        return ChatResponse(
+            success=False,
+            message=f"Error: {str(e)}",
+            session_id=request.session_id
+        )
+
+async def process_chat_with_sse(session_id: str, message: str, images: list = None, task_id: str = None):
+    """Process chat and send updates via SSE"""
+    import asyncio  # Ensure asyncio is available in this function
+    try:
+        # Send initial progress
+        await sse_manager.send_verbose(session_id, "Processing your request...", "user_input")
+
+        # Use existing Claude service logic but with SSE output
+        session_dir = FileService.create_session_directory(session_id)
+
+        from langgraph_claude_agent import ClaudeCodeAgent
+        agent = ClaudeCodeAgent(session_directory=session_dir, session_id=session_id)
+
+        # Process images if provided
+        user_message = message
+        if images and len(images) > 0:
+            image_context = ClaudeService._process_image_data(images, session_id)
+            user_message = f"{message}\n\n{image_context}" if message else image_context
+
+        # Get file context
+        file_context = FileService.create_context_message(session_id)
+        full_prompt = f"{file_context}\n\n## User Request:\n{user_message}" if file_context else user_message
+
+        # Start file monitoring via SSE
+        asyncio.create_task(monitor_files_sse(session_id))
+
+        # Stream Claude's response via SSE
+        async for stream_data in agent.execute_claude_code_streaming(full_prompt):
+            message_type = stream_data.get('type', 'unknown')
+
+            if message_type == 'verbose':
+                await sse_manager.send_verbose(
+                    session_id,
+                    stream_data.get('message', ''),
+                    stream_data.get('subtype', ''),
+                    stream_data.get('tool_name'),
+                    stream_data.get('tool_input')
+                )
+
+            elif message_type == 'text':
+                await sse_manager.send_text(session_id, stream_data.get('content', ''))
+
+            elif message_type == 'success':
+                await sse_manager.send_success(
+                    session_id,
+                    stream_data.get('result', ''),
+                    stream_data.get('metadata', {})
+                )
+                break
+
+            elif message_type == 'error':
+                await sse_manager.send_error(
+                    session_id,
+                    stream_data.get('message', ''),
+                    stream_data.get('error', '')
+                )
+                break
+
+    except Exception as e:
+        logger.error(f"Error in SSE chat processing: {e}")
+        await sse_manager.send_error(session_id, f"Processing error: {str(e)}")
+
+async def monitor_files_sse(session_id: str):
+    """Monitor file changes and send via SSE"""
+    import asyncio  # Ensure asyncio is available
+    session_dir = FileService.create_session_directory(session_id)
+    initial_files = set()
+
+    if session_dir.exists():
+        for file_path in session_dir.rglob("*"):
+            if file_path.is_file():
+                initial_files.add(str(file_path.relative_to(session_dir)))
+
+    while True:
+        try:
+            await asyncio.sleep(0.5)  # Poll every 500ms
+
+            current_files = set()
+            if session_dir.exists():
+                for file_path in session_dir.rglob("*"):
+                    if file_path.is_file():
+                        current_files.add(str(file_path.relative_to(session_dir)))
+
+            new_files = current_files - initial_files
+            if new_files:
+                files = FileService.list_session_files(session_id)
+                await sse_manager.send_files_updated(
+                    session_id,
+                    [file.dict() for file in files],
+                    list(new_files)
+                )
+                initial_files.update(new_files)
+
+        except Exception as e:
+            logger.error(f"Error in SSE file monitoring: {e}")
+            break
