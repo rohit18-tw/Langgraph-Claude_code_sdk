@@ -113,100 +113,115 @@
 }
 
 .message {
-  margin-bottom: 1rem;
+  margin-bottom: 1.75rem;
   max-width: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .message.user {
-  margin-left: 15%;
+  align-items: flex-end;
+}
+
+.message.assistant,
+.message.system,
+.message.tool,
+.message.error,
+.message.progress {
+  align-items: flex-start;
+}
+
+.message-content {
+  border: none;
+  color: #333333;
+  max-width: 85%;
+  word-wrap: break-word;
+  padding: 0.75rem 1rem;
+  line-height: 1.6;
+  border-radius: 12px;
+  transition: background-color 0.2s ease;
 }
 
 .message.user .message-content {
-  background-color: #333333;
-  color: white;
-  margin-left: auto;
+  background-color: #f0f0f0;
+  color: #333333;
+  text-align: right;
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
 }
 
 .message.assistant .message-content {
-  background-color: #f5f5f5;
-  border: 1px solid #e0e0e0;
+  background-color: #f9f9f9;
+  color: #333333;
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
 }
 
-.message.system .message-content {
+.message.user .message-content:hover {
+  background-color: #e8e8e8;
+}
+
+.message.assistant .message-content:hover {
   background-color: #f0f0f0;
-  border: 1px solid #d0d0d0;
 }
 
-.message.tool .message-content {
-  background-color: #f8f8f8;
-  border: 1px solid #e0e0e0;
-}
+/* Assistant message text color already defined above */
 
 .message.error .message-content {
-  background-color: #f8f8f8;
-  border: 1px solid #d0d0d0;
-  color: #666666;
+  background-color: #fef2f2;
+  color: #dc2626;
+  font-style: italic;
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+  border: 1px solid #fecaca;
 }
 
 .message.progress .message-content {
-  background-color: #f0f0f0;
-  color: #333333;
-  border: 1px solid #d0d0d0;
+  background-color: #f8f9fa;
+  color: #666666;
+  font-style: italic;
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+  border: 1px solid #e9ecef;
 }
 
-.message.progress .message-text {
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.message.progress .message-text::before {
-  content: "";
-  width: 14px;
-  height: 14px;
-  border: 2px solid #d0d0d0;
-  border-top: 2px solid #666666;
-  border-radius: 50%;
-  animation: progressSpin 1s linear infinite;
-}
+/* Progress styles simplified */
 
 .progress-content {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  justify-content: space-between;
 }
 
 .progress-spinner {
   font-size: 0.9rem;
   animation: spin 1s linear infinite;
+  color: #666666;
 }
 
 .progress-text {
   color: #666666;
-  font-weight: 500;
+  font-weight: 400;
   flex: 1;
+  font-style: italic;
 }
 
 .stop-button {
-  background-color: #666666;
-  color: white;
-  border: none;
-  padding: 0.3rem 0.6rem;
-  border-radius: 4px;
+  background-color: transparent;
+  color: #666666;
+  border: 1px solid #d0d0d0;
+  padding: 0.25rem 0.5rem;
+  border-radius: 16px;
   font-size: 0.75rem;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
   white-space: nowrap;
 }
 
 .stop-button:hover {
-  background-color: #555555;
+  background-color: #f5f5f5;
+  border-color: #999999;
 }
 
 @keyframes progressSpin {
@@ -218,44 +233,15 @@
   }
 }
 
-.message-header {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 0.4rem;
-  font-size: 0.8rem;
-}
+/* Message headers removed for ChatGPT-style clean look */
 
-.message-icon {
-  font-size: 0.9rem;
-}
-
-.message-sender {
-  font-weight: 600;
-  color: #666666;
-}
-
-.message-timestamp {
-  color: #999999;
-  font-size: 0.75rem;
-  margin-left: auto;
-}
-
-.message-content {
-  padding: 0.75rem 1rem;
-  border-radius: 8px;
-  max-width: 85%;
-  word-wrap: break-word;
-}
-
-.message.user .message-content {
-  margin-left: auto;
-}
+/* Old message-content styles removed - using new ChatGPT-style definitions above */
 
 .message-text {
   line-height: 1.6;
   white-space: pre-wrap;
   font-size: 0.9rem;
+  color: inherit;
 }
 
 .message-content pre {
@@ -282,30 +268,7 @@
   color: inherit;
 }
 
-.message-metadata {
-  margin-top: 0.5rem;
-  padding-top: 0.5rem;
-  border-top: 1px solid #e0e0e0;
-}
-
-.message.assistant .message-metadata,
-.message.system .message-metadata,
-.message.tool .message-metadata {
-  border-top: 1px solid #e0e0e0;
-}
-
-.execution-stats {
-  display: flex;
-  gap: 0.75rem;
-  font-size: 0.75rem;
-  color: #666666;
-}
-
-.execution-stats span {
-  display: flex;
-  align-items: center;
-  gap: 0.2rem;
-}
+/* Message metadata removed for clean ChatGPT-style interface */
 
 .message-input-form {
   padding: 1rem;
@@ -379,7 +342,7 @@
 .input-container {
   display: flex;
   gap: 0.75rem;
-  align-items: flex-end;
+  align-items: center;
   background-color: #f8f9fa;
   padding: 12px;
   border-radius: 24px;
@@ -388,8 +351,8 @@
 }
 
 .input-container:focus-within {
-  border-color: #333333;
-  box-shadow: 0 0 0 1px rgba(51, 51, 51, 0.1);
+  border-color: #d0d0d0;
+  box-shadow: none;
 }
 
 .file-upload-button {
@@ -480,14 +443,29 @@
   font-size: 0.9rem;
   line-height: 1.5;
   resize: none;
-  min-height: 20px;
-  max-height: 100px;
+  min-height: 24px;
+  max-height: 120px;
   font-family: inherit;
   color: #333333;
+  overflow-y: hidden;
+  transition: height 0.1s ease;
 }
 
 .message-input:focus {
-  outline: none;
+  outline: none !important;
+  box-shadow: none !important;
+  border: none !important;
+}
+
+/* Remove any default browser focus styles */
+.message-input:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.input-container *:focus {
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 .message-input:disabled {
@@ -608,13 +586,32 @@
     margin-bottom: 0.75rem;
   }
 
-  .message.user {
-    margin-left: 8%;
+  .message.user,
+  .message.assistant,
+  .message.system,
+  .message.tool,
+  .message.error,
+  .message.progress {
+    align-items: stretch;
   }
 
   .message-content {
-    max-width: 92%;
+    max-width: 100%;
+    text-align: left;
     padding: 0.6rem 0.8rem;
+    border-radius: 12px;
+  }
+
+  .message.user .message-content {
+    background-color: #f0f0f0;
+    padding: 0.6rem 0.8rem;
+    border-radius: 12px;
+  }
+
+  .message.assistant .message-content {
+    background-color: #f9f9f9;
+    padding: 0.6rem 0.8rem;
+    border-radius: 12px;
   }
 
   .message-input-form {
@@ -646,17 +643,8 @@
 }
 
 @media (max-width: 480px) {
-  .message.user {
-    margin-left: 0;
-  }
-
   .message-content {
     max-width: 100%;
-  }
-
-  .execution-stats {
-    flex-direction: column;
-    gap: 0.25rem;
   }
 }
 

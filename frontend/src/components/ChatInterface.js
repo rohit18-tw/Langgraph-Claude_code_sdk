@@ -57,25 +57,25 @@ const ChatInterface = ({ messages, onSendMessage, onFileUpload, isLoading, isCon
     }
   };
 
-  const formatTimestamp = (timestamp) => {
-    return new Date(timestamp).toLocaleTimeString('en-US', {
-      hour12: true,
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+  // Auto-resize textarea like ChatGPT
+  const autoResizeTextarea = (textarea) => {
+    textarea.style.height = 'auto';
+    textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
   };
 
-  const getMessageIcon = (sender) => {
-    switch (sender) {
-      case 'user': return 'U';
-      case 'assistant': return 'A';
-      case 'system': return 'S';
-      case 'tool': return 'T';
-      case 'progress': return 'P';
-      case 'error': return 'E';
-      default: return 'M';
-    }
+  const handleInputChange = (e) => {
+    setInputMessage(e.target.value);
+    autoResizeTextarea(e.target);
   };
+
+  // Reset textarea height when message is cleared
+  useEffect(() => {
+    if (inputMessage === '' && inputRef.current) {
+      inputRef.current.style.height = 'auto';
+    }
+  }, [inputMessage]);
+
+  // Timestamp and icon functions removed for ChatGPT-style clean interface
 
   const getMessageClass = (sender) => {
     return `message ${sender}`;
@@ -121,26 +121,9 @@ const ChatInterface = ({ messages, onSendMessage, onFileUpload, isLoading, isCon
     );
   };
 
+  // Metadata rendering removed as per user request
   const renderMetadata = (metadata) => {
-    if (!metadata) return null;
-
-    return (
-      <div className="message-metadata">
-        {metadata.metadata && (
-          <div className="execution-stats">
-            {metadata.metadata.duration_ms && (
-              <span>{metadata.metadata.duration_ms}ms</span>
-            )}
-            {metadata.metadata.num_turns && (
-              <span>{metadata.metadata.num_turns} turns</span>
-            )}
-            {metadata.metadata.total_cost_usd && (
-              <span>${metadata.metadata.total_cost_usd.toFixed(4)}</span>
-            )}
-          </div>
-        )}
-      </div>
-    );
+    return null;
   };
 
   const handleFileUploadClick = () => {
@@ -244,15 +227,6 @@ const ChatInterface = ({ messages, onSendMessage, onFileUpload, isLoading, isCon
           <>
             {messages.map((message) => (
               <div key={message.id} className={getMessageClass(message.sender)}>
-                <div className="message-header">
-                  <span className="message-icon">{getMessageIcon(message.sender)}</span>
-                  <span className="message-sender">
-                    {message.sender.charAt(0).toUpperCase() + message.sender.slice(1)}
-                  </span>
-                  <span className="message-timestamp">
-                    {formatTimestamp(message.timestamp)}
-                  </span>
-                </div>
                 <div className="message-content">
                   {renderMessageContent(message)}
                   {renderMetadata(message.metadata)}
@@ -263,13 +237,6 @@ const ChatInterface = ({ messages, onSendMessage, onFileUpload, isLoading, isCon
             {/* Single updating progress display */}
             {currentProgress && (
               <div className="message progress">
-                <div className="message-header">
-                  <span className="message-icon">P</span>
-                  <span className="message-sender">Progress</span>
-                  <span className="message-timestamp">
-                    {formatTimestamp(Date.now())}
-                  </span>
-                </div>
                 <div className="message-content">
                   <div className="progress-content">
                     <div className="progress-spinner">●</div>
@@ -389,7 +356,7 @@ const ChatInterface = ({ messages, onSendMessage, onFileUpload, isLoading, isCon
             <textarea
               ref={inputRef}
               value={inputMessage}
-              onChange={(e) => setInputMessage(e.target.value)}
+              onChange={handleInputChange}
               onKeyPress={handleKeyPress}
               placeholder={
                 isConnected
