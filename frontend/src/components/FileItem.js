@@ -1,9 +1,8 @@
 import React from 'react';
 
 const FileItem = ({ file, onClick, showFullName = false }) => {
-  const displayName = showFullName
-    ? file.name
-    : file.name.split('_').slice(1).join('_') || file.name;
+  // Always show the exact original filename
+  const displayName = file.name;
 
   return (
     <div

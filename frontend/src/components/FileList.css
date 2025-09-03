@@ -639,3 +639,133 @@
   width: 1px;
   background-color: #dee2e6;
 }
+
+/* Enhanced FileList Styles - Watchdog Integration */
+.enhanced-indicator {
+  color: #4CAF50;
+  font-size: 12px;
+  margin-left: 5px;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+
+.enhanced-directory-tree {
+  width: 100%;
+}
+
+.enhanced-directory {
+  width: 100%;
+}
+
+.enhanced-folder-header {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  cursor: pointer;
+  background-color: #f9f9f9;
+  border-radius: 4px;
+  margin: 1px 0;
+  transition: background-color 0.2s ease;
+  font-size: 13px;
+  min-height: 28px;
+}
+
+.enhanced-folder-header:hover {
+  background-color: #f0f0f0;
+}
+
+.enhanced-folder-header .folder-icon {
+  margin-right: 6px;
+  font-size: 14px;
+}
+
+.enhanced-folder-header .folder-name {
+  flex: 1;
+  font-weight: 500;
+  color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.enhanced-folder-header .folder-toggle {
+  margin: 0 6px;
+  font-size: 10px;
+  color: #666;
+  transition: transform 0.2s ease;
+}
+
+.enhanced-folder-header .file-count {
+  font-size: 11px;
+  color: #888;
+  background-color: #e0e0e0;
+  padding: 2px 6px;
+  border-radius: 10px;
+  margin-left: 4px;
+}
+
+.enhanced-folder-contents {
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+}
+
+.enhanced-file {
+  position: relative;
+}
+
+.enhanced-file .file-item {
+  margin: 1px 0;
+  padding: 4px 8px;
+  border-radius: 3px;
+  font-size: 12px;
+  min-height: 24px;
+}
+
+.enhanced-file .file-item:hover {
+  background-color: #f5f5f5;
+}
+
+/* Real-time update indicators */
+.file-updated {
+  animation: fileUpdated 1s ease;
+}
+
+@keyframes fileUpdated {
+  0% { background-color: #e8f5e8; }
+  100% { background-color: transparent; }
+}
+
+.directory-updated {
+  animation: directoryUpdated 1s ease;
+}
+
+@keyframes directoryUpdated {
+  0% { border-left: 3px solid #4CAF50; }
+  100% { border-left: 3px solid transparent; }
+}
+
+/* Improved loading states */
+.enhanced-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  color: #666;
+  font-style: italic;
+}
+
+.enhanced-loading::before {
+  content: "⚡";
+  margin-right: 8px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

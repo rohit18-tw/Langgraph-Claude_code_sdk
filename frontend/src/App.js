@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import axios from 'axios';
 import SessionSidebar from './components/SessionSidebar';
 import ChatInterface from './components/ChatInterface';
-import FileList from './components/FileList';
+import EnhancedFileList from './components/EnhancedFileList';
 import ConnectionStatus from './components/ConnectionStatus';
 import MCPManager from './components/MCPManager';
 import useSSE from './hooks/useSSE';
@@ -14,14 +14,18 @@ const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 function App() {
   const [sessionId, setSessionId] = useState(() => uuidv4());
   const [uploadedFiles, setUploadedFiles] = useState([]);
+  const [directoryStructure, setDirectoryStructure] = useState(null);
   const [messages, setMessages] = useState([]);
   const [isConnected, setIsConnected] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [currentProgress, setCurrentProgress] = useState(null);
   const [showMCPManager, setShowMCPManager] = useState(false);
 
+
+
+
   // Helper function to add messages
-  const addMessage = (sender, content, metadata = {}) => {
+  const addMessage = useCallback((sender, content, metadata = {}) => {
     const newMessage = {
       id: uuidv4(),
       sender,
@@ -31,7 +35,7 @@ function App() {
       metadata
     };
     setMessages(prev => [...prev, newMessage]);
-  };
+  }, []);
 
     // SSE Message Handlers (defined before useSSE hook)
   const handleSSEMessage = useCallback((data) => {
@@ -41,32 +45,48 @@ function App() {
       case 'verbose':
         // Enhanced verbose messages - this is what we want!
         if (message) {
-          setCurrentProgress(message);
+          // Only show non-file-creation messages as progress
+          if (!message.startsWith('Created ')) {
+            setCurrentProgress(message);
+          }
+
+          // Handle file creation by updating progress message (no separate chat message)
+          if (rest.subtype === 'file_created' && message.startsWith('Created ')) {
+            const filePath = message.replace('Created ', '');
+            setCurrentProgress(`created file : ${filePath}`);
+          }
         }
         break;
       case 'progress':
-        // Only show meaningful progress messages
+        // Only show meaningful progress messages, exclude file creation messages
         if (message &&
             !message.includes('Processing your request') &&
             !message.includes('Processing...') &&
-            !message.includes('Session Initialized')) {
+            !message.includes('Session Initialized') &&
+            !message.includes('Created ') &&
+            !message.includes('Creating ')) {
           setCurrentProgress(message);
         }
         break;
       case 'text':
-        // Streaming text content from Claude - don't add message here
-        // Wait for 'success' event which has the complete response with metadata
+        // Just ignore streaming text - wait for final success message
         break;
       case 'files_updated':
         setUploadedFiles(rest.files || []);
-        if (rest.new_files && rest.new_files.length > 0) {
-          setCurrentProgress(`📁 Created ${rest.new_files.length} new file(s)`);
-          setTimeout(() => setCurrentProgress(null), 3000);
+        // No progress messages for file updates
+        break;
+      case 'directory_structure_updated':
+        // Real-time directory structure updates from watchdog (silent)
+        if (rest.structure) {
+          setDirectoryStructure(rest.structure);
+          setUploadedFiles(rest.structure.files || []);
+          // No progress messages for structure updates
         }
         break;
       case 'success':
         setIsLoading(false);
         setCurrentProgress(null);
+
         if (rest.result && rest.result.trim()) {
           addMessage('assistant', rest.result, { timestamp, metadata: rest.metadata });
         }
@@ -97,27 +117,33 @@ function App() {
     setIsConnected(sseStatus === 'connected');
   }, [sseStatus]);
 
+  const loadSessionFiles = useCallback(async () => {
+    try {
+      // Load both flat file list and directory structure
+      const [filesResponse, structureResponse] = await Promise.all([
+        axios.get(`${API_BASE_URL}/sessions/${sessionId}/files`, {
+          headers: { 'ngrok-skip-browser-warning': 'true' }
+        }),
+        axios.get(`${API_BASE_URL}/sessions/${sessionId}/structure`, {
+          headers: { 'ngrok-skip-browser-warning': 'true' }
+        })
+      ]);
+
+      setUploadedFiles(filesResponse.data.files || []);
+      setDirectoryStructure(structureResponse.data || null);
+    } catch (error) {
+      console.error('Error loading session files:', error);
+      addMessage('error', `Failed to load files: ${error.message}`);
+    }
+  }, [sessionId, addMessage]);
+
   useEffect(() => {
     // Load session files on session change
     const hasExistingData = localStorage.getItem(`session_${sessionId}`);
     if (hasExistingData) {
       loadSessionFiles();
     }
-  }, [sessionId]);
-
-
-
-  const loadSessionFiles = async () => {
-    try {
-      const response = await axios.get(`${API_BASE_URL}/sessions/${sessionId}/files`, {
-        headers: { 'ngrok-skip-browser-warning': 'true' }
-      });
-      setUploadedFiles(response.data.files || []);
-    } catch (error) {
-      console.error('Error loading session files:', error);
-      addMessage('error', `Failed to load files: ${error.message}`);
-    }
-  };
+  }, [sessionId, loadSessionFiles]);
 
   const handleFileUpload = async (files) => {
     try {
@@ -133,7 +159,7 @@ function App() {
 
       await loadSessionFiles(); // Only call this AFTER files are actually uploaded
     } catch (error) {
-      addMessage('error', `Failed to upload files: ${error.message}`);
+      console.error('File upload failed:', error);
       throw error;
     }
   };
@@ -151,6 +177,8 @@ function App() {
 
       setIsLoading(true);
       setCurrentProgress('Sending message...');
+
+
 
       // Send message via new SSE endpoint
       const response = await axios.post(`${API_BASE_URL}/chat/sse`, {
@@ -338,8 +366,9 @@ function App() {
         </div>
 
         <div className="files-panel">
-          <FileList
+          <EnhancedFileList
             files={uploadedFiles}
+            directoryStructure={directoryStructure}
             onClearSession={handleClearSession}
             sessionId={sessionId}
             showUploadedOnly={false}

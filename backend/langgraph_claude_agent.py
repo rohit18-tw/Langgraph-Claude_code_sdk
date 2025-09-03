@@ -163,7 +163,6 @@ class ClaudeCodeAgent:
                     async for message in client.receive_response():
                         message_type = type(message).__name__
 
-
                         # Handle content blocks
                         if hasattr(message, 'content') and message.content:
                             for block in message.content:
@@ -274,7 +273,8 @@ class ClaudeCodeAgent:
             return f"Reading: {path}"
         elif tool_name == 'Write':
             path = tool_input.get('file_path', '') or tool_input.get('path', '')
-            return f"Writing: {path}"
+            filename = path.split('/')[-1] if path else 'file'
+            return f"Creating {filename}"
         elif tool_name == 'Edit':
             path = tool_input.get('file_path', '') or tool_input.get('path', '')
             return f"Editing: {path}"

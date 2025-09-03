@@ -77,6 +77,15 @@ const useSSE = (sessionId, onMessage, onError) => {
         }
       });
 
+      eventSourceRef.current.addEventListener('directory_structure_updated', (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          onMessageRef.current && onMessageRef.current({ type: 'directory_structure_updated', ...data });
+        } catch (e) {
+          console.error('Error parsing directory_structure_updated event:', e);
+        }
+      });
+
       eventSourceRef.current.addEventListener('success', (event) => {
         try {
           const data = JSON.parse(event.data);

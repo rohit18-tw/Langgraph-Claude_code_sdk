@@ -6,6 +6,7 @@ from fastapi import UploadFile, HTTPException
 
 from config import UPLOAD_DIR
 from models import FileUploadResponse, FileInfo
+from services.file_monitor import FileStructureService
 
 class FileService:
     @staticmethod
@@ -59,7 +60,7 @@ class FileService:
 
     @staticmethod
     def list_session_files(session_id: str) -> List[FileInfo]:
-        """List all files for a session"""
+        """List all files for a session (backward compatibility)"""
         session_dir = UPLOAD_DIR / session_id
         if not session_dir.exists():
             return []
@@ -68,17 +69,46 @@ class FileService:
         FileService.migrate_old_files(session_id)
 
         files = []
-        for file_path in session_dir.rglob("*"):
-            if file_path.is_file():
-                files.append(FileInfo(
-                    name=file_path.name,
-                    path=str(file_path.relative_to(session_dir)),
-                    size=file_path.stat().st_size,
-                    type=FileService.get_file_type(file_path.name),
-                    modified=datetime.fromtimestamp(file_path.stat().st_mtime).isoformat()
-                ))
+        flat_files = FileStructureService.get_flat_file_list(session_dir)
+
+        for file_data in flat_files:
+            files.append(FileInfo(
+                name=file_data['name'],
+                path=file_data['path'],
+                size=file_data['size'],
+                type=file_data['type'],
+                modified=file_data['modified']
+            ))
 
         return files
+
+    @staticmethod
+    def get_session_directory_structure(session_id: str) -> dict:
+        """Get complete directory structure including folders and files"""
+        session_dir = UPLOAD_DIR / session_id
+        if not session_dir.exists():
+            return {
+                'tree': {'name': session_id, 'path': '', 'is_directory': True, 'children': {}},
+                'files': [],
+                'total_files': 0,
+                'total_size': 0
+            }
+
+        # Only migrate files if the directory already exists
+        FileService.migrate_old_files(session_id)
+
+        return FileStructureService.get_directory_structure(session_dir)
+
+    @staticmethod
+    async def start_session_monitoring(session_id: str, callback=None):
+        """Start real-time monitoring for a session directory"""
+        session_dir = FileService.create_session_directory(session_id)
+        await FileStructureService.start_monitoring(session_id, session_dir, callback)
+
+    @staticmethod
+    def stop_session_monitoring(session_id: str):
+        """Stop real-time monitoring for a session directory"""
+        FileStructureService.stop_monitoring(session_id)
 
     @staticmethod
     def get_file_content(session_id: str, file_path: str) -> dict:
