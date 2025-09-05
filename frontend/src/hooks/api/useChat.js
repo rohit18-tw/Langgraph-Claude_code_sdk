@@ -196,6 +196,12 @@ export const useChat = () => {
         });
         break;
 
+      case 'files_updated':
+      case 'directory_structure_updated':
+        // File system changes - handled by ChatPage, not here
+        // Return the data so it can be handled at a higher level
+        return data;
+
       default:
         // Unknown message type, ignore
         break;

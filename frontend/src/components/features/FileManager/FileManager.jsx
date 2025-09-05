@@ -8,7 +8,7 @@ import OriginalEnhancedFileList from '../../EnhancedFileList';
  * Enhanced File Manager with new architecture
  * Currently wraps existing component while migration is in progress
  */
-const FileManager = ({ onClearSession, ...props }) => {
+const FileManager = ({ onClearSession, onViewFile, ...props }) => {
   const { uploadedFiles, directoryStructure, currentSessionId } = useSessionContext();
 
   return (
@@ -17,6 +17,7 @@ const FileManager = ({ onClearSession, ...props }) => {
       directoryStructure={directoryStructure}
       sessionId={currentSessionId}
       onClearSession={onClearSession}
+      onViewFile={onViewFile}
       showUploadedOnly={false}
       {...props}
     />

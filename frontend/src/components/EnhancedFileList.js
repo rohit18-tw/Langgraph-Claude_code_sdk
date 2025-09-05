@@ -252,7 +252,7 @@ const LegacyTreeView = ({ files, onFileClick }) => {
   );
 };
 
-const EnhancedFileList = ({ files, directoryStructure, onClearSession, sessionId, showUploadedOnly = false }) => {
+const EnhancedFileList = ({ files, directoryStructure, onClearSession, sessionId, showUploadedOnly = false, onViewFile }) => {
   const [viewingFile, setViewingFile] = useState(null);
   const [fileContent, setFileContent] = useState('');
   const [isLoadingContent, setIsLoadingContent] = useState(false);
@@ -270,7 +270,15 @@ const EnhancedFileList = ({ files, directoryStructure, onClearSession, sessionId
   const useEnhancedView = directoryStructure && directoryStructure.tree && !showUploadedOnly;
   const totalFiles = useEnhancedView ? directoryStructure.total_files : filteredFiles.length;
 
+
   const handleViewFile = async (file) => {
+    // If parent provides onViewFile, use centralized viewing
+    if (onViewFile) {
+      onViewFile(file);
+      return;
+    }
+
+    // Otherwise, use local modal viewing (fallback)
     setViewingFile(file);
     setIsLoadingContent(true);
     setContentError('');
@@ -370,7 +378,7 @@ const EnhancedFileList = ({ files, directoryStructure, onClearSession, sessionId
         </div>
       )}
 
-      {viewingFile && (
+      {viewingFile && !onViewFile && (
         <FileViewer
           file={viewingFile}
           content={fileContent}

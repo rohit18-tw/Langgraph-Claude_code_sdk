@@ -5,7 +5,6 @@ import './ChatInterface.css';
 
 const ChatInterface = ({ messages, onSendMessage, onFileUpload, isLoading, isConnected, currentProgress, onStopGeneration, uploadedFiles }) => {
   const [inputMessage, setInputMessage] = useState('');
-  const [showFileUpload, setShowFileUpload] = useState(false);
   const [showUploadMenu, setShowUploadMenu] = useState(false);
   const [imageModal, setImageModal] = useState({ isOpen: false, src: '', name: '' });
   const [selectedImages, setSelectedImages] = useState([]);
@@ -79,6 +78,26 @@ const ChatInterface = ({ messages, onSendMessage, onFileUpload, isLoading, isCon
 
   const getMessageClass = (sender) => {
     return `message ${sender}`;
+  };
+
+  // Get avatar content based on message sender
+  const getAvatarContent = (sender) => {
+    switch (sender) {
+      case 'user':
+        return 'You';
+      case 'assistant':
+        return 'AI';
+      case 'system':
+        return 'SYS';
+      case 'tool':
+        return 'Tool';
+      case 'error':
+        return '!';
+      case 'progress':
+        return '⏳';
+      default:
+        return 'AI';
+    }
   };
 
   const renderMessageContent = (message) => {
@@ -191,20 +210,6 @@ const ChatInterface = ({ messages, onSendMessage, onFileUpload, isLoading, isCon
 
   return (
     <div className="chat-interface">
-      <div className="chat-header">
-        <h3>AI Assistant</h3>
-        <div className="chat-status">
-          {isLoading && currentProgress && (
-            <span className="loading-indicator">
-              {currentProgress}
-            </span>
-          )}
-          {isLoading && !currentProgress && (
-            <span className="loading-indicator">Initializing...</span>
-          )}
-          {!isConnected && <span className="connection-warning">Offline Mode</span>}
-        </div>
-      </div>
 
       <div className="messages-container">
         {messages.length === 0 ? (
@@ -227,6 +232,12 @@ const ChatInterface = ({ messages, onSendMessage, onFileUpload, isLoading, isCon
           <>
             {messages.map((message) => (
               <div key={message.id} className={getMessageClass(message.sender)}>
+                {/* Message Avatar */}
+                <div className="message-avatar">
+                  {getAvatarContent(message.sender)}
+                </div>
+
+                {/* Message Content */}
                 <div className="message-content">
                   {renderMessageContent(message)}
                   {renderMetadata(message.metadata)}
@@ -237,9 +248,15 @@ const ChatInterface = ({ messages, onSendMessage, onFileUpload, isLoading, isCon
             {/* Single updating progress display */}
             {currentProgress && (
               <div className="message progress">
+                {/* Progress Avatar */}
+                <div className="message-avatar">
+                  {getAvatarContent('progress')}
+                </div>
+
+                {/* Progress Content */}
                 <div className="message-content">
                   <div className="progress-content">
-                    <div className="progress-spinner">●</div>
+                    <div className="progress-spinner"></div>
                     <div className="progress-text">{currentProgress}</div>
                     {onStopGeneration && (
                       <button
