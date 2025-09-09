@@ -116,6 +116,16 @@ async def update_mcp_config(config: MCPConfig):
         logger.error(f"Error updating MCP config: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error updating MCP config: {str(e)}")
 
+@router.get("/claude/permission-modes")
+async def get_permission_modes():
+    """Get available Claude Code SDK permission modes"""
+    try:
+        modes = await ClaudeService.get_permission_modes()
+        return {"permission_modes": modes}
+    except Exception as e:
+        logger.error(f"Error getting permission modes: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error getting permission modes: {str(e)}")
+
 # SSE Routes
 @router.get("/stream/{session_id}")
 async def sse_stream(session_id: str, request: Request):
@@ -124,16 +134,16 @@ async def sse_stream(session_id: str, request: Request):
 
 @router.post("/chat/sse", response_model=ChatResponse)
 async def chat_with_sse(request: ChatMessage):
-    """Enhanced chat endpoint that uses SSE for streaming responses"""
+    """Enhanced chat endpoint that uses SSE for streaming responses with built-in session management"""
     from services.claude_service import ClaudeService
 
     try:
         # Start processing in background and stream via SSE
         task_id = f"task_{request.session_id}_{int(asyncio.get_event_loop().time() * 1000)}"
 
-        # Start Claude processing in background
+        # Start Claude processing in background with new SDK
         asyncio.create_task(
-            process_chat_with_sse(request.session_id, request.message, request.images, task_id)
+            process_chat_with_sse_sdk(request.session_id, request.message, request.images, task_id)
         )
 
         return ChatResponse(
@@ -150,6 +160,135 @@ async def chat_with_sse(request: ChatMessage):
             message=f"Error: {str(e)}",
             session_id=request.session_id
         )
+
+@router.post("/chat/resume", response_model=ChatResponse)
+async def resume_chat_session(request: ChatMessage):
+    """Resume a specific chat session by UUID with enhanced permission management"""
+    try:
+        # Extract permission mode from request metadata if available
+        permission_mode = "acceptEdits"  # Default
+        if hasattr(request, 'metadata') and request.metadata:
+            permission_mode = request.metadata.get('permission_mode', 'acceptEdits')
+
+        result = await ClaudeService.resume_session(
+            session_id=request.session_id,
+            message=request.message,
+            images=request.images,
+            permission_mode=permission_mode
+        )
+
+        return ChatResponse(
+            success=result["success"],
+            message=result["message"],
+            session_id=result["session_id"],
+            metadata=result.get("metadata", {})
+        )
+
+    except Exception as e:
+        logger.error(f"Error resuming chat session: {str(e)}")
+        return ChatResponse(
+            success=False,
+            message=f"Error resuming session: {str(e)}",
+            session_id=request.session_id
+        )
+
+@router.post("/chat/continue", response_model=ChatResponse)
+async def continue_recent_conversation(request: ChatMessage):
+    """Continue the most recent conversation using built-in session management"""
+    try:
+        # Use the built-in continue conversation feature
+        result = await ClaudeService.process_chat_message(
+            session_id=request.session_id,
+            message=request.message,
+            images=request.images
+        )
+
+        return ChatResponse(
+            success=result["success"],
+            message=result["message"],
+            session_id=result["session_id"],
+            metadata=result.get("metadata", {})
+        )
+
+    except Exception as e:
+        logger.error(f"Error continuing conversation: {str(e)}")
+        return ChatResponse(
+            success=False,
+            message=f"Error continuing conversation: {str(e)}",
+            session_id=request.session_id
+        )
+
+async def process_chat_with_sse_sdk(session_id: str, message: str, images: list = None, task_id: str = None):
+    """Process chat with new Claude Code SDK and send updates via SSE"""
+    import asyncio
+    try:
+        # Send initial progress
+        await sse_manager.send_verbose(session_id, "Processing your request with Claude Code SDK...", "user_input")
+
+        # Start real-time file monitoring
+        processing_active = False
+
+        async def file_change_callback(event_type: str, file_path: str):
+            """Callback for file system events"""
+            try:
+                if event_type == 'created' and processing_active:
+                    # Clean temporary file suffixes from the path for display
+                    clean_path = file_path
+                    clean_path = re.sub(r'\.tmp\.\d+', '', clean_path)  # .tmp.numbers
+                    clean_path = re.sub(r'\.\d{10,}$', '', clean_path)  # .long_numbers at end
+                    clean_path = re.sub(r'\.temp$', '', clean_path)     # .temp
+
+                    await sse_manager.send_verbose(
+                        session_id,
+                        f"Created {clean_path}",
+                        "file_created",
+                        tool_name="SDK",
+                        tool_input={"file": clean_path}
+                    )
+
+                # Always update file structure
+                if event_type in ['created', 'modified']:
+                    structure = FileService.get_session_directory_structure(session_id)
+                    await sse_manager.send_files_updated(
+                        session_id,
+                        structure['files'],
+                        [file_path] if event_type == 'created' else []
+                    )
+                    await sse_manager.send_event(session_id, 'directory_structure_updated', {
+                        'structure': structure
+                    })
+            except Exception as e:
+                logger.error(f"Error in file change callback: {e}")
+
+        await FileService.start_session_monitoring(session_id, file_change_callback)
+        processing_active = True
+
+        # Use the new ClaudeService with SDK
+        result = await ClaudeService.process_chat_message(
+            session_id=session_id,
+            message=message,
+            images=images
+        )
+
+        if result["success"]:
+            await sse_manager.send_success(
+                session_id,
+                result["message"],
+                result.get("metadata", {})
+            )
+        else:
+            await sse_manager.send_error(
+                session_id,
+                result["message"],
+                result["message"]
+            )
+
+    except Exception as e:
+        logger.error(f"Error in SDK SSE chat processing: {e}")
+        await sse_manager.send_error(session_id, f"Processing error: {str(e)}")
+    finally:
+        # Stop file monitoring when processing ends
+        await FileService.stop_session_monitoring(session_id)
 
 async def process_chat_with_sse(session_id: str, message: str, images: list = None, task_id: str = None):
     """Process chat and send updates via SSE"""
@@ -257,5 +396,3 @@ async def process_chat_with_sse(session_id: str, message: str, images: list = No
     finally:
         # Stop file monitoring when processing ends
         await FileService.stop_session_monitoring(session_id)
-
-

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import ImageModal from './ImageModal';
+import PermissionModeSelector from './PermissionModeSelector';
 import './ChatInterface.css';
 
 const ChatInterface = ({ messages, onSendMessage, onFileUpload, isLoading, isConnected, currentProgress, onStopGeneration, uploadedFiles }) => {
@@ -8,6 +9,7 @@ const ChatInterface = ({ messages, onSendMessage, onFileUpload, isLoading, isCon
   const [showUploadMenu, setShowUploadMenu] = useState(false);
   const [imageModal, setImageModal] = useState({ isOpen: false, src: '', name: '' });
   const [selectedImages, setSelectedImages] = useState([]);
+  const [permissionMode, setPermissionMode] = useState('acceptEdits');
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -38,11 +40,11 @@ const ChatInterface = ({ messages, onSendMessage, onFileUpload, isLoading, isCon
   const handleSubmit = (e) => {
     e.preventDefault();
     if ((inputMessage.trim() || selectedImages.length > 0) && !isLoading) {
-      // Send message with images if any
+      // Send message with images and permission mode
       if (selectedImages.length > 0) {
-        onSendMessage(inputMessage, selectedImages);
+        onSendMessage(inputMessage, selectedImages, permissionMode);
       } else {
-        onSendMessage(inputMessage);
+        onSendMessage(inputMessage, [], permissionMode);
       }
       setInputMessage('');
       setSelectedImages([]);
@@ -300,6 +302,15 @@ const ChatInterface = ({ messages, onSendMessage, onFileUpload, isLoading, isCon
             ))}
           </div>
         )}
+
+        {/* Compact Permission Mode Selector */}
+        <div className="input-controls">
+          <PermissionModeSelector
+            selectedMode={permissionMode}
+            onModeChange={setPermissionMode}
+            disabled={isLoading}
+          />
+        </div>
 
         <div className="input-container">
           <div className="upload-container">
