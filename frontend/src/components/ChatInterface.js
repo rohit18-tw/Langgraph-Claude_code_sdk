@@ -10,7 +10,9 @@ const ChatInterface = ({ messages, onSendMessage, onFileUpload, isLoading, isCon
   const [imageModal, setImageModal] = useState({ isOpen: false, src: '', name: '' });
   const [selectedImages, setSelectedImages] = useState([]);
   const [permissionMode, setPermissionMode] = useState('acceptEdits');
+  const [showScrollToTop, setShowScrollToTop] = useState(false);
   const messagesEndRef = useRef(null);
+  const messagesContainerRef = useRef(null);
   const inputRef = useRef(null);
   const fileInputRef = useRef(null);
   const folderInputRef = useRef(null);
@@ -33,8 +35,28 @@ const ChatInterface = ({ messages, onSendMessage, onFileUpload, isLoading, isCon
     };
   }, [showUploadMenu]);
 
+  // Monitor scroll position to show/hide scroll-to-top button
+  useEffect(() => {
+    const handleScroll = () => {
+      if (messagesContainerRef.current) {
+        const scrollTop = messagesContainerRef.current.scrollTop;
+        setShowScrollToTop(scrollTop > 150); // Show button when scrolled down past the header padding
+      }
+    };
+
+    const container = messagesContainerRef.current;
+    if (container) {
+      container.addEventListener('scroll', handleScroll);
+      return () => container.removeEventListener('scroll', handleScroll);
+    }
+  }, [messages]); // Re-attach when messages change
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const scrollToTop = () => {
+    messagesContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleSubmit = (e) => {
@@ -213,7 +235,18 @@ const ChatInterface = ({ messages, onSendMessage, onFileUpload, isLoading, isCon
   return (
     <div className="chat-interface">
 
-      <div className="messages-container">
+      <div className="messages-container" ref={messagesContainerRef}>
+        {/* Scroll to Top Button */}
+        {showScrollToTop && (
+          <button
+            onClick={scrollToTop}
+            className="scroll-to-top-button"
+            title="Scroll to top"
+          >
+            ↑ Top
+          </button>
+        )}
+
         {messages.length === 0 ? (
           <div className="welcome-message">
             <div className="welcome-content">

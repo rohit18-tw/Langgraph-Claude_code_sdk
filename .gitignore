@@ -127,6 +127,7 @@ public
 
 # Project specific
 uploads/
+sessions/
 *.db
 *.sqlite
 *.sqlite3

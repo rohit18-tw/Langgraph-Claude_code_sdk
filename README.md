@@ -78,21 +78,28 @@ Copy the example environment file and configure it:
 cp backend/.env.example backend/.env
 ```
 
-Edit `backend/.env` and replace `your_anthropic_api_key_here` with your actual Anthropic API key:
+Edit `backend/.env` and configure the following key settings:
 ```bash
-# Required: Your Anthropic API key
+# REQUIRED: Your Anthropic API key
 ANTHROPIC_API_KEY=sk-ant-api03-your_actual_api_key_here
 
-# Optional: Server configuration (defaults shown)
+# OPTIONAL: Server configuration (defaults shown)
 HOST=0.0.0.0
 PORT=8000
-DEBUG=true
-LOG_LEVEL=INFO
+DEBUG=false
 
-# Optional: Redis configuration (only if using Redis features)
-REDIS_URL=redis://localhost:6379
+# OPTIONAL: Sessions Directory (IMPORTANT FOR SECURITY)
+# Leave empty for default (../claude_sessions - outside project)
+# Or specify custom path (recommended to be outside project directory)
+SESSIONS_DIR=
+
+# OPTIONAL: Advanced configuration
+LOG_LEVEL=INFO
 SESSION_TTL_HOURS=24
+CORS_ORIGINS=*
 ```
+
+**Important Security Note**: The `SESSIONS_DIR` should be **outside your project directory** for security isolation. The default location (`../claude_sessions`) is recommended.
 
 **Important**: Never commit your actual `.env` file to version control. The `.gitignore` file is configured to exclude `.env` files.
 
@@ -125,6 +132,9 @@ REACT_APP_WS_URL=ws://localhost:8000
 
 # Development Settings
 GENERATE_SOURCEMAP=false
+DANGEROUSLY_DISABLE_HOST_CHECK=true
+HOST=0.0.0.0
+PORT=3000
 ```
 
 **Note**: If you're using ngrok or deploying to a different host, update these URLs accordingly.

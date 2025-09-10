@@ -288,7 +288,7 @@ async def process_chat_with_sse_sdk(session_id: str, message: str, images: list 
         await sse_manager.send_error(session_id, f"Processing error: {str(e)}")
     finally:
         # Stop file monitoring when processing ends
-        await FileService.stop_session_monitoring(session_id)
+        FileService.stop_session_monitoring(session_id)
 
 async def process_chat_with_sse(session_id: str, message: str, images: list = None, task_id: str = None):
     """Process chat and send updates via SSE"""
@@ -395,4 +395,4 @@ async def process_chat_with_sse(session_id: str, message: str, images: list = No
         await sse_manager.send_error(session_id, f"Processing error: {str(e)}")
     finally:
         # Stop file monitoring when processing ends
-        await FileService.stop_session_monitoring(session_id)
+        FileService.stop_session_monitoring(session_id)

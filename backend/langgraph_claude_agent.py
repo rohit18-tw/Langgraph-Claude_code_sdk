@@ -51,6 +51,45 @@ class ClaudeCodeAgent:
                 "mcp__web"               # Web MCP server
             ]
 
+            # COMPREHENSIVE security restrictions for session isolation
+            disallowed_tools = [
+                # === DANGEROUS SYSTEM COMMANDS ===
+                "Bash(rm*)",         # Prevent dangerous deletions
+                "Bash(sudo*)",       # Prevent sudo commands
+                "Bash(*cd ..*)",     # Prevent directory traversal
+                "Bash(*cd /*)",      # Prevent absolute path navigation
+                "Bash(*cd ~*)",      # Prevent home directory access
+
+                # === ABSOLUTE PATH RESTRICTIONS (COMPREHENSIVE) ===
+                # Block ALL absolute paths (anything starting with /)
+                "Read(/*)",          # Block all absolute path reads
+                "Write(/*)",         # Block all absolute path writes
+                "Edit(/*)",          # Block all absolute path edits
+                "LS(/*)",            # Block all absolute path listings
+                "Grep(/*)",          # Block all absolute path searches
+
+                # === HOME DIRECTORY RESTRICTIONS ===
+                "Read(~*)",          # Block home directory reads
+                "Write(~*)",         # Block home directory writes
+                "Edit(~*)",          # Block home directory edits
+                "LS(~*)",            # Block home directory listings
+                "Grep(~*)",          # Block home directory searches
+
+                # === PARENT DIRECTORY TRAVERSAL (COMPREHENSIVE) ===
+                "Read(..*)",         # Block any parent directory access
+                "Write(..*)",        # Block any parent directory writes
+                "Edit(..*)",         # Block any parent directory edits
+                "LS(..*)",           # Block any parent directory listings
+                "Grep(..*)",         # Block any parent directory searches
+
+                # Complex traversal patterns
+                "Read(*..*)",        # Block patterns like "../" anywhere
+                "Write(*..*)",       # Block patterns like "../" anywhere
+                "Edit(*..*)",        # Block patterns like "../" anywhere
+                "LS(*..*)",          # Block patterns like "../" anywhere
+                "Grep(*..*)",        # Block patterns like "../" anywhere
+            ]
+
             options = ClaudeCodeOptions(
                 permission_mode=self.permission_mode,
                 cwd=str(self.session_directory.resolve()),
@@ -58,8 +97,9 @@ class ClaudeCodeAgent:
                 continue_conversation=True,
                 # Only resume if we have a valid session ID and it's not a new random UUID
                 resume=None,  # Don't resume by default for new sessions
-                # Enhanced tool capabilities
+                # Enhanced tool capabilities with security restrictions
                 allowed_tools=allowed_tools,
+                disallowed_tools=disallowed_tools,
                 # MCP server configuration (pass as dictionary, not file path)
                 mcp_servers=mcp_servers,
                 # No limit on turns for complex code generation tasks
@@ -69,7 +109,8 @@ class ClaudeCodeAgent:
                     "You have access to web search, GitHub integration, and image processing capabilities. "
                     "For images (screenshots, diagrams, charts), use the Read tool to analyze them. "
                     "For GitHub operations, use the GitHub MCP tools. "
-                    "For web research, use WebSearch and WebFetch tools."
+                    "For web research, use WebSearch and WebFetch tools. "
+                    "SECURITY: You are restricted to the current session directory only."
                 )
             )
             self.client = ClaudeSDKClient(options=options)

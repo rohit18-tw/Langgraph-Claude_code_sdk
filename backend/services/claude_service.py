@@ -37,12 +37,43 @@ class ClaudeService:
             "mcp__github", "mcp__filesystem", "mcp__web"
         ]
 
-        # Pattern-based tool restrictions for security
+        # COMPREHENSIVE pattern-based tool restrictions for security and isolation
         disallowed_tools = [
+            # === DANGEROUS SYSTEM COMMANDS ===
             "Bash(rm*)",         # Prevent dangerous deletions
             "Bash(sudo*)",       # Prevent sudo commands
-            "Write(/etc/*)",     # Protect system files
-            "Edit(/etc/*)"       # Protect system configs
+            "Bash(*cd ..*)",     # Prevent directory traversal
+            "Bash(*cd /*)",      # Prevent absolute path navigation
+            "Bash(*cd ~*)",      # Prevent home directory access
+
+            # === ABSOLUTE PATH RESTRICTIONS (COMPREHENSIVE) ===
+            # Block ALL absolute paths (anything starting with /)
+            "Read(/*)",          # Block all absolute path reads
+            "Write(/*)",         # Block all absolute path writes
+            "Edit(/*)",          # Block all absolute path edits
+            "LS(/*)",            # Block all absolute path listings
+            "Grep(/*)",          # Block all absolute path searches
+
+            # === HOME DIRECTORY RESTRICTIONS ===
+            "Read(~*)",          # Block home directory reads
+            "Write(~*)",         # Block home directory writes
+            "Edit(~*)",          # Block home directory edits
+            "LS(~*)",            # Block home directory listings
+            "Grep(~*)",          # Block home directory searches
+
+            # === PARENT DIRECTORY TRAVERSAL (COMPREHENSIVE) ===
+            "Read(..*)",         # Block any parent directory access
+            "Write(..*)",        # Block any parent directory writes
+            "Edit(..*)",         # Block any parent directory edits
+            "LS(..*)",           # Block any parent directory listings
+            "Grep(..*)",         # Block any parent directory searches
+
+            # Complex traversal patterns
+            "Read(*..*)",        # Block patterns like "../" anywhere
+            "Write(*..*)",       # Block patterns like "../" anywhere
+            "Edit(*..*)",        # Block patterns like "../" anywhere
+            "LS(*..*)",          # Block patterns like "../" anywhere
+            "Grep(*..*)",        # Block patterns like "../" anywhere
         ]
 
         return ClaudeCodeOptions(
